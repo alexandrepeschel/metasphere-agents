@@ -12,8 +12,9 @@
 from __future__ import annotations
 
 import os
+import shlex
+import subprocess
 import sys
-import time
 
 from metasphere.agents import session_alive
 from metasphere.events import log_event
@@ -111,14 +112,26 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if cmd in ("exit-self", "exit_self"):
-        # Synchronously send /exit into the caller's tmux pane. Mirrors
-        # ``gateway.session.restart_agent_session`` but resolves the
-        # caller from $METASPHERE_AGENT_ID rather than taking it as an
-        # arg, and skips the per-agent restart-pending marker because
-        # ephemeral cron-fired agents don't have a watchdog
-        # continuation to inject.
+        # Schedule a /exit into the caller's tmux pane via a detached
+        # background process. Resolves the caller from
+        # $METASPHERE_AGENT_ID and mirrors the C-c x2 + C-u + /exit +
+        # Enter x2 sequence used by ``gateway.session.restart_agent_session``.
         #
-        # Behavior split downstream:
+        # Why detached: this command is itself running in the caller's
+        # pane (via the agent's Bash tool). Sending C-c via tmux
+        # send-keys to that same pane delivers SIGINT to the pane's
+        # foreground process — claude — which propagates the interrupt
+        # to its child (this metasphere CLI process). Calling the
+        # send-keys sequence inline would kill THIS process before
+        # ``/exit`` could be delivered, leaving claude alive and the
+        # pane zombied at "Interrupted · What should Claude do
+        # instead?" (observed 2026-05-03 across all 4 research-monitor
+        # cron fires). A detached child with start_new_session=True
+        # survives the parent's death; a short pre-sleep gives the
+        # caller's Bash tool time to return cleanly before the C-c
+        # arrives.
+        #
+        # Behavior split downstream of /exit:
         # - Persistent agents (respawn loop running in pane shell):
         #   /exit kills claude → respawn loop spins fresh claude →
         #   watchdog injects continuation prompt. Pane stays alive.
@@ -127,12 +140,6 @@ def main(argv: list[str] | None = None) -> int:
         #   ``reap_ephemeral_idle`` step in the lifecycle daemon
         #   completes cleanup within the configured threshold
         #   (default 30 min).
-        #
-        # Pre-2026-04-30 this wrote a deferred-command marker via
-        # ``request_deferred_command("/exit")`` that needed a Stop-hook
-        # tick to fire. Empty REPL panes (cron-fired single-shot
-        # sessions) emit no Stop hook, so the marker sat forever and
-        # the session zombied. Synchronous send removes the dependency.
         caller = os.environ.get("METASPHERE_AGENT_ID")
         if not caller:
             print("Error: $METASPHERE_AGENT_ID not set", file=sys.stderr)
@@ -147,31 +154,38 @@ def main(argv: list[str] | None = None) -> int:
                 file=sys.stderr,
             )
             return 1
-        # Mirror restart_agent_session: C-c twice to kill in-flight
-        # input, C-u to clear readline, then ``/exit`` as literal +
-        # Enter (with belt-and-suspenders second Enter for the
-        # paste-buffer race).
-        _tmux("send-keys", "-t", target, "C-c")
-        time.sleep(0.3)
-        _tmux("send-keys", "-t", target, "C-c")
-        time.sleep(0.3)
-        _tmux("send-keys", "-t", target, "C-u")
-        time.sleep(0.2)
-        _tmux("send-keys", "-t", target, "-l", "--", "/exit")
-        time.sleep(0.3)
-        _tmux("send-keys", "-t", target, "Enter")
-        time.sleep(0.4)
-        _tmux("send-keys", "-t", target, "Enter")
+        t = shlex.quote(target)
+        # 2.5s pre-sleep: long enough for this Bash tool to return and
+        # claude to begin emitting its final assistant text; short
+        # enough that the agent's pane is freed promptly. The sleep
+        # only delays the kill, not the agent — Stop hook fires
+        # naturally on turn end either way.
+        keystrokes_sh = (
+            f"sleep 2.5; "
+            f"tmux send-keys -t {t} C-c; sleep 0.3; "
+            f"tmux send-keys -t {t} C-c; sleep 0.3; "
+            f"tmux send-keys -t {t} C-u; sleep 0.2; "
+            f"tmux send-keys -t {t} -l -- /exit; sleep 0.3; "
+            f"tmux send-keys -t {t} Enter; sleep 0.4; "
+            f"tmux send-keys -t {t} Enter"
+        )
+        subprocess.Popen(  # noqa: S603 — fixed argv, no shell=True
+            ["bash", "-c", keystrokes_sh],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True,
+        )
         try:
             log_event(
                 "agent.exit_self",
-                f"{caller} sent /exit to own session {target}",
+                f"{caller} queued /exit for own session {target}",
                 agent=caller,
                 meta={"session": target},
             )
         except Exception:
             pass
-        print(f"sent /exit to {target} ({caller})")
+        print(f"queued /exit for {target} ({caller}) in 2.5s")
         return 0
 
     print(f"unknown subcommand: {cmd}", file=sys.stderr)

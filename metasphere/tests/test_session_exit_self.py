@@ -1,11 +1,16 @@
 """Tests for ``metasphere session exit-self``.
 
-Phase H final: exit-self synchronously sends ``/exit`` to the caller's
-own tmux pane (resolved from $METASPHERE_AGENT_ID), replacing the
-deferred-command marker path. The marker path could never fire on
-empty REPL panes (cron-fired single-shot sessions emit no Stop hook),
-so cron-fired ephemerals zombied. Synchronous send removes the
-dependency on Stop-hook ticks.
+Phase H: exit-self schedules ``/exit`` for the caller's own tmux pane.
+Replaces the deferred-command marker path, which couldn't fire on
+empty REPL panes (cron-fired single-shot sessions emit no Stop hook).
+
+The kill sequence (C-c x2 + C-u + ``/exit`` literal + Enter x2) runs
+inside a detached background process spawned via ``subprocess.Popen``
+with ``start_new_session=True``. Running it inline would be fatal:
+``tmux send-keys C-c`` against the caller's own pane delivers SIGINT
+to claude, which propagates to its currently-running Bash tool — i.e.
+this metasphere CLI process — killing it before ``/exit`` can be
+delivered. Detaching survives the parent's death.
 """
 
 from __future__ import annotations
@@ -29,21 +34,19 @@ def _agent_record(name: str, project: str = ""):
     )
 
 
-def test_exit_self_sends_exit_to_resolved_session(monkeypatch):
-    """Happy path: agent set, session alive → tmux receives ``/exit``."""
+def test_exit_self_schedules_kill_via_detached_subprocess(monkeypatch):
+    """Happy path: agent set, session alive → a detached Popen fires
+    the C-c x2 + /exit + Enter x2 sequence. The main process MUST NOT
+    call ``_tmux`` directly — that would self-interrupt this CLI
+    process before /exit could land in the caller's pane.
+    """
     monkeypatch.setenv("METASPHERE_AGENT_ID", "@worker-cron-1")
 
-    calls: list[tuple] = []
+    popen_calls: list[dict] = []
 
-    def _record(*args):
-        calls.append(args)
-
-        class R:
-            returncode = 0
-            stdout = ""
-            stderr = ""
-
-        return R()
+    class _FakePopen:
+        def __init__(self, args, **kwargs):
+            popen_calls.append({"args": args, "kwargs": kwargs})
 
     with patch(
         "metasphere.cli.session._resolve_session",
@@ -51,31 +54,53 @@ def test_exit_self_sends_exit_to_resolved_session(monkeypatch):
     ), patch(
         "metasphere.cli.session.session_alive", return_value=True
     ), patch(
-        "metasphere.cli.session._tmux", side_effect=_record
+        "metasphere.cli.session._tmux",
+        side_effect=AssertionError(
+            "exit-self must NOT call _tmux from the main process — that "
+            "would self-interrupt the caller's Bash tool. Use a "
+            "detached subprocess instead."
+        ),
     ), patch(
-        "metasphere.cli.session.time.sleep", return_value=None
+        "metasphere.cli.session.subprocess.Popen", _FakePopen
     ):
         rc = cli_session.main(["exit-self"])
 
     assert rc == 0
-    # The send-keys sequence mirrors restart_agent_session: C-c, C-c,
-    # C-u, /exit literal, Enter, Enter.
-    sent_args = [c for c in calls if c and c[0] == "send-keys"]
-    assert len(sent_args) == 6
-    # Final call should be send-keys -t <session> Enter (belt-and-suspenders).
-    assert sent_args[-1] == ("send-keys", "-t", "metasphere-worker-cron-1", "Enter")
-    # The /exit literal must use ``-l --`` so flags inside the payload
-    # are not parsed by tmux.
-    exit_calls = [c for c in sent_args if "/exit" in c]
-    assert exit_calls, "expected one send-keys carrying '/exit' literal"
-    assert "-l" in exit_calls[0]
+    assert len(popen_calls) == 1, f"expected one detached Popen, got {popen_calls}"
+    call = popen_calls[0]
+
+    # Detached: must use start_new_session so the child survives parent death.
+    assert call["kwargs"].get("start_new_session") is True, (
+        "Popen must set start_new_session=True so the kill sequence "
+        f"survives the parent metasphere CLI exiting. kwargs={call['kwargs']}"
+    )
+
+    # Argv shape: ["bash", "-c", "<script>"]
+    assert call["args"][:2] == ["bash", "-c"]
+    script = call["args"][2]
+
+    # The script must target the resolved session name and include the
+    # full restart_agent_session-style sequence.
+    assert "metasphere-worker-cron-1" in script
+    assert "C-c" in script
+    assert "C-u" in script
+    assert "/exit" in script
+    assert "Enter" in script
+    # /exit must be sent with -l -- so flags inside the payload aren't
+    # parsed by tmux.
+    assert "-l -- /exit" in script
+    # Pre-sleep delays the kill so the caller's Bash tool can return.
+    assert "sleep" in script
 
 
 def test_exit_self_no_agent_env_returns_1(monkeypatch, capsys):
-    """No $METASPHERE_AGENT_ID → exit code 1 + stderr message, no tmux send."""
+    """No $METASPHERE_AGENT_ID → exit code 1 + stderr message, no kill spawn."""
     monkeypatch.delenv("METASPHERE_AGENT_ID", raising=False)
 
-    with patch("metasphere.cli.session._tmux", side_effect=AssertionError("tmux must not be called")):
+    with patch(
+        "metasphere.cli.session.subprocess.Popen",
+        side_effect=AssertionError("Popen must not be called"),
+    ):
         rc = cli_session.main(["exit-self"])
 
     assert rc == 1
@@ -85,7 +110,7 @@ def test_exit_self_no_agent_env_returns_1(monkeypatch, capsys):
 
 def test_exit_self_headless_no_tmux_returns_1(monkeypatch, capsys):
     """Agent has no live tmux session (headless ``claude -p``) →
-    exit code 1, clean stderr, no crash."""
+    exit code 1, clean stderr, no crash, no kill spawn."""
     monkeypatch.setenv("METASPHERE_AGENT_ID", "@headless-spawn")
 
     with patch(
@@ -94,7 +119,8 @@ def test_exit_self_headless_no_tmux_returns_1(monkeypatch, capsys):
     ), patch(
         "metasphere.cli.session.session_alive", return_value=False
     ), patch(
-        "metasphere.cli.session._tmux", side_effect=AssertionError("tmux must not be called")
+        "metasphere.cli.session.subprocess.Popen",
+        side_effect=AssertionError("Popen must not be called"),
     ):
         rc = cli_session.main(["exit-self"])
 
@@ -119,16 +145,17 @@ def test_exit_self_emits_agent_exit_self_event(monkeypatch):
             {"type": type_, "message": message, "agent": agent, "meta": meta or {}}
         )
 
+    class _FakePopen:
+        def __init__(self, *_args, **_kwargs):
+            pass
+
     with patch(
         "metasphere.cli.session._resolve_session",
         return_value="metasphere-worker-cron-1",
     ), patch(
         "metasphere.cli.session.session_alive", return_value=True
     ), patch(
-        "metasphere.cli.session._tmux",
-        return_value=type("R", (), {"returncode": 0, "stdout": "", "stderr": ""})(),
-    ), patch(
-        "metasphere.cli.session.time.sleep", return_value=None
+        "metasphere.cli.session.subprocess.Popen", _FakePopen
     ), patch(
         "metasphere.cli.session.log_event", side_effect=_fake_log_event
     ):
@@ -144,10 +171,16 @@ def test_exit_self_emits_agent_exit_self_event(monkeypatch):
 
 def test_exit_self_event_emit_failure_does_not_break_exit(monkeypatch):
     """If ``log_event`` raises (disk full, permissions, etc), the actual
-    /exit send must still complete and return 0 — observability is
-    best-effort, the kill is load-bearing.
+    kill spawn must still complete and the call must still return 0 —
+    observability is best-effort, the kill is load-bearing.
     """
     monkeypatch.setenv("METASPHERE_AGENT_ID", "@worker-cron-1")
+
+    spawned: list[bool] = []
+
+    class _FakePopen:
+        def __init__(self, *_args, **_kwargs):
+            spawned.append(True)
 
     with patch(
         "metasphere.cli.session._resolve_session",
@@ -155,10 +188,7 @@ def test_exit_self_event_emit_failure_does_not_break_exit(monkeypatch):
     ), patch(
         "metasphere.cli.session.session_alive", return_value=True
     ), patch(
-        "metasphere.cli.session._tmux",
-        return_value=type("R", (), {"returncode": 0, "stdout": "", "stderr": ""})(),
-    ), patch(
-        "metasphere.cli.session.time.sleep", return_value=None
+        "metasphere.cli.session.subprocess.Popen", _FakePopen
     ), patch(
         "metasphere.cli.session.log_event",
         side_effect=OSError("disk full"),
@@ -166,6 +196,7 @@ def test_exit_self_event_emit_failure_does_not_break_exit(monkeypatch):
         rc = cli_session.main(["exit-self"])
 
     assert rc == 0
+    assert spawned, "kill spawn must run even when log_event fails"
 
 
 def test_exit_self_resolves_project_scoped_agent(monkeypatch):
@@ -175,18 +206,11 @@ def test_exit_self_resolves_project_scoped_agent(monkeypatch):
     """
     monkeypatch.setenv("METASPHERE_AGENT_ID", "@accelerator-programs")
 
-    sent_targets: list[str] = []
+    popen_calls: list[dict] = []
 
-    def _record(*args):
-        if args and args[0] == "send-keys" and "-t" in args:
-            sent_targets.append(args[args.index("-t") + 1])
-
-        class R:
-            returncode = 0
-            stdout = ""
-            stderr = ""
-
-        return R()
+    class _FakePopen:
+        def __init__(self, args, **kwargs):
+            popen_calls.append({"args": args, "kwargs": kwargs})
 
     rec = _agent_record("@accelerator-programs", project="research")
 
@@ -196,16 +220,21 @@ def test_exit_self_resolves_project_scoped_agent(monkeypatch):
     ), patch(
         "metasphere.cli.session.session_alive", return_value=True
     ), patch(
-        "metasphere.cli.session._tmux", side_effect=_record
-    ), patch(
-        "metasphere.cli.session.time.sleep", return_value=None
+        "metasphere.cli.session.subprocess.Popen", _FakePopen
     ):
         rc = cli_session.main(["exit-self"])
 
     assert rc == 0
-    assert sent_targets, "expected at least one send-keys -t <session>"
+    assert popen_calls, "expected one detached Popen for the kill"
+    script = popen_calls[0]["args"][2]
     expected = "metasphere-research-accelerator-programs"
-    assert all(t == expected for t in sent_targets), (
-        f"all send-keys must target project-scoped session {expected}; "
-        f"got {sent_targets}"
+    assert expected in script, (
+        f"detached kill script must target project-scoped session "
+        f"{expected!r}; got script={script!r}"
+    )
+    # Verify the bare (un-prefixed) session name is NOT what we send to.
+    bare_pattern = "tmux send-keys -t metasphere-accelerator-programs "
+    assert bare_pattern not in script, (
+        "detached kill script must not target the bare session name "
+        "(regression: 04-28 project-scope resolver bug)"
     )
