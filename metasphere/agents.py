@@ -65,6 +65,12 @@ def _tmux_bin() -> str:
 # Model
 # ---------------------------------------------------------------------------
 
+#: Recognised values for the ``<agent_dir>/class`` sidecar. Anything else
+#: (missing file, empty, garbage) leaves the legacy MISSION.md heuristic in
+#: charge.
+_AGENT_CLASS_VALUES = ("ephemeral", "persistent")
+
+
 @dataclass
 class AgentRecord:
     name: str  # always with @ prefix
@@ -76,6 +82,10 @@ class AgentRecord:
     pid_file: Optional[Path] = None
     agent_dir: Optional[Path] = None
     project: str = ""  # project name if project-scoped, empty if global
+    #: Explicit lifecycle class read from ``<agent_dir>/class`` sidecar.
+    #: ``"ephemeral"`` or ``"persistent"`` overrides the MISSION.md
+    #: heuristic in :attr:`is_persistent`; ``None`` means no override.
+    agent_class: Optional[str] = None
 
     @property
     def session_name(self) -> str:
@@ -86,6 +96,13 @@ class AgentRecord:
 
     @property
     def is_persistent(self) -> bool:
+        # The class sidecar is the authoritative override. MISSION.md
+        # presence remains the legacy fallback so agents predating the
+        # sidecar keep their classification.
+        if self.agent_class == "ephemeral":
+            return False
+        if self.agent_class == "persistent":
+            return True
         return self.mission_path is not None and self.mission_path.is_file()
 
 
@@ -129,6 +146,8 @@ def _agent_record_from_dir(agent_dir: Path, project: str = "") -> AgentRecord:
     # Read project pointer if not provided
     if not project:
         project = _read_text(agent_dir / "project")
+    class_str = _read_text(agent_dir / "class")
+    agent_class = class_str if class_str in _AGENT_CLASS_VALUES else None
     return AgentRecord(
         name=name,
         scope=_read_text(agent_dir / "scope"),
@@ -139,6 +158,7 @@ def _agent_record_from_dir(agent_dir: Path, project: str = "") -> AgentRecord:
         pid_file=pid_file if pid_file.is_file() else None,
         agent_dir=agent_dir,
         project=project,
+        agent_class=agent_class,
     )
 
 
@@ -674,7 +694,12 @@ def wake_persistent(
 
     from .gateway.session import _respawn_cmd
 
-    respawn = _respawn_cmd(agent_id, model=model)
+    # Thread the agent's class through to the respawn command so an
+    # agent classed ``ephemeral`` runs claude once and idles at bash
+    # (reap_ephemeral_idle's job) rather than looping forever and
+    # turning a clean exit-self into a respawn-into-/exit-menu stall.
+    agent_class = "ephemeral" if not rec.is_persistent else "persistent"
+    respawn = _respawn_cmd(agent_id, model=model, agent_class=agent_class)
     _tmux_run("send-keys", "-t", session, respawn, "Enter")
 
     _atomic_meta_write(agent_dir, "status", "active: persistent session")
@@ -1101,18 +1126,22 @@ def reap_crashed(paths: Paths | None = None) -> list[str]:
 # When an ephemeral agent sends !done it has no reason to keep its
 # tmux pane (if any) or process linkage around — the parent's
 # Accountability check runs against artifacts on disk, not against the
-# child process. Persistent agents must NOT be killed on !done:
-# they're long-lived collaborators and may well send multiple !dones
-# over their lifetime. Their session lifecycle is governed by
-# ``reap_dormant`` (idle-TTL) instead.
+# child process. Persistent agents must NOT be killed on !done: they
+# may send multiple !dones over their lifetime, and their session
+# lifecycle is governed by ``reap_dormant`` (idle-TTL) instead.
+# Classification reads ``AgentRecord.is_persistent``, so the
+# ``<agent_dir>/class`` sidecar override flips behaviour the same way
+# the rest of the lifecycle does.
 # ---------------------------------------------------------------------------
 
 def on_done_delivered(sender: str, paths: Paths | None = None) -> Optional[str]:
     """Fired from :func:`metasphere.messages.send_message` right after a
     ``!done`` message is delivered to its target. Kills the sender's
-    tmux session and clears runtime state pointers iff the sender is
-    an ephemeral agent (no ``MISSION.md``). Persistent senders are a
-    no-op — their lifecycle is governed by idle-TTL dormancy.
+    tmux session and clears runtime state pointers iff the sender
+    classifies as ephemeral via :attr:`AgentRecord.is_persistent`
+    (``<agent_dir>/class`` sidecar override or — absent the sidecar —
+    no ``MISSION.md``). Persistent senders are a no-op — their
+    lifecycle is governed by idle-TTL dormancy.
 
     Returns the killed session name if an ephemeral cleanup ran, else
     ``None``. Persona files (``harness.md``, ``authority``,

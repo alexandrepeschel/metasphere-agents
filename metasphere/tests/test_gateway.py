@@ -792,3 +792,59 @@ def test_respawn_cmd_with_model_still_disables_feedback():
     cmd = gw_session._respawn_cmd("@worker", model="anthropic/claude-haiku-4-5")
     assert "CLAUDE_CODE_DISABLE_FEEDBACK_SURVEY=1" in cmd
     assert "--model anthropic/claude-haiku-4-5" in cmd
+
+
+# ---------------------------------------------------------------------------
+# _respawn_cmd — class-aware respawn (2026-05-05 research-monitor zombies)
+#
+# Persistent class (default) keeps the existing infinite respawn loop +
+# restart_pending marker so the watchdog can inject a continuation prompt
+# into each fresh claude. Ephemeral class drops the loop entirely: claude
+# runs once and the pane drops to interactive bash so reap_ephemeral_idle
+# collects the session via its session_activity timer. The bug the
+# ephemeral path closes: clean exit-self → respawn loop respawned claude
+# → watchdog injected continuation → fresh REPL stuck on /exit slash menu.
+# ---------------------------------------------------------------------------
+
+
+def test_respawn_cmd_persistent_default_keeps_while_loop():
+    """Default class is persistent — must keep the infinite respawn loop
+    AND write a restart_pending marker so the watchdog can inject."""
+    cmd = gw_session._respawn_cmd("@orchestrator")
+    assert "while true" in cmd
+    assert "restart_pending.@orchestrator.json" in cmd
+
+
+def test_respawn_cmd_ephemeral_drops_while_loop():
+    """Ephemeral class must NOT contain a respawn loop; on claude exit
+    the pane drops to interactive bash for reap_ephemeral_idle."""
+    cmd = gw_session._respawn_cmd("@brand-mentions", agent_class="ephemeral")
+    assert "while true" not in cmd
+    # No restart_pending marker — the watchdog must not be invited to
+    # inject a continuation into a non-existent successor process.
+    assert "restart_pending" not in cmd
+    # Pane lands at interactive bash after claude exits so the tmux
+    # session_activity clock starts ticking for reap_ephemeral_idle.
+    assert "exec bash" in cmd
+    # Claude itself still runs once.
+    assert "claude --dangerously-skip-permissions" in cmd
+
+
+def test_respawn_cmd_ephemeral_preserves_env_disable():
+    """The feedback-modal + nonessential-traffic env disable must apply
+    to ephemeral class too — it's not just a respawn-loop concern."""
+    cmd = gw_session._respawn_cmd("@one-shot", agent_class="ephemeral")
+    assert "CLAUDE_CODE_DISABLE_FEEDBACK_SURVEY=1" in cmd
+    assert "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1" in cmd
+    disable_idx = cmd.index("CLAUDE_CODE_DISABLE_FEEDBACK_SURVEY=1")
+    claude_idx = cmd.index("claude --dangerously-skip-permissions")
+    assert disable_idx < claude_idx
+
+
+def test_respawn_cmd_ephemeral_with_model():
+    """Model flag composes with ephemeral class."""
+    cmd = gw_session._respawn_cmd(
+        "@one-shot", model="claude-haiku-4-5", agent_class="ephemeral"
+    )
+    assert "while true" not in cmd
+    assert "--model claude-haiku-4-5" in cmd

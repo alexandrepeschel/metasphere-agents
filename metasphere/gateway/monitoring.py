@@ -4,8 +4,8 @@ Three counter families, each a pure-Python probe with no side effects:
 
 - ``zombie_counters()``     — total procfs state='Z' + ``npm root -g`` slice
 - ``tmux_counters(paths)``  — live tmux sessions split by persistent /
-                              ephemeral (via ``MISSION.md`` presence in
-                              the matching agent directory)
+                              ephemeral via ``AgentRecord.is_persistent``
+                              (sidecar override or MISSION.md fallback)
 - ``pid_headroom()``        — configured PID limit (cgroup pids.max
                               authoritative when finite, otherwise
                               ``/proc/sys/kernel/pid_max``), current
@@ -170,14 +170,19 @@ def _tmux_list_sessions() -> list[str]:
 
 
 def _session_is_persistent(session: str, paths: Paths) -> bool:
-    """True iff the session corresponds to an agent with MISSION.md.
+    """True iff the session corresponds to a persistent agent.
 
     Session convention: ``metasphere-<name>`` for global agents and
     ``metasphere-<project>-<name>`` for project-scoped ones. Both map
-    back to an agent directory that has ``MISSION.md`` iff persistent.
-    The orchestrator session (``metasphere-orchestrator``) always
-    counts as persistent — it IS the persistent collaborator.
+    back to an agent directory whose classification we read via
+    :func:`metasphere.agents._agent_record_from_dir`, so this
+    classifier inherits the ``<agent_dir>/class`` sidecar override
+    (PR #73) instead of duplicating the MISSION.md heuristic. The
+    orchestrator session (``metasphere-orchestrator``) always counts
+    as persistent — it IS the persistent collaborator.
     """
+    from metasphere.agents import _agent_record_from_dir
+
     if not session.startswith(_AGENT_SESSION_PREFIX):
         return False
     stripped = session[len(_AGENT_SESSION_PREFIX):]
@@ -185,8 +190,9 @@ def _session_is_persistent(session: str, paths: Paths) -> bool:
         return False
     # Global agent: metasphere-<name> -> @<name>
     global_dir = paths.agents / f"@{stripped}"
-    if (global_dir / "MISSION.md").is_file():
-        return True
+    if global_dir.is_dir():
+        if _agent_record_from_dir(global_dir).is_persistent:
+            return True
     # Project-scoped: metasphere-<project>-<name>; walk right-to-left so
     # agent names containing a hyphen still resolve when the project
     # name is a known directory.
@@ -199,8 +205,9 @@ def _session_is_persistent(session: str, paths: Paths) -> bool:
             if not project or not agent:
                 continue
             pdir = projects_dir / project / "agents" / f"@{agent}"
-            if (pdir / "MISSION.md").is_file():
-                return True
+            if pdir.is_dir():
+                if _agent_record_from_dir(pdir, project=project).is_persistent:
+                    return True
     return False
 
 

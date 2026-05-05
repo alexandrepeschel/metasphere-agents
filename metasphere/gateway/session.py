@@ -34,16 +34,38 @@ def write_harness_hash_baseline(paths: Paths) -> None:
 
 SESSION_NAME = "metasphere-orchestrator"
 
-# Build the respawn loop command for a given agent. The loop writes a
-# per-agent restart_pending marker whenever claude exits, so the watchdog
-# can inject a continuation prompt into the fresh instance.
-def _respawn_cmd(agent: str = "@orchestrator", *, model: str = "") -> str:
-    """Return the respawn loop command for a given agent.
+# Build the respawn command for a given agent. For ``persistent`` class
+# agents (default) the command is an infinite loop that respawns claude
+# whenever it exits and writes a per-agent restart_pending marker so the
+# watchdog can inject a continuation prompt into the fresh instance.
+# For ``ephemeral`` class agents the command runs claude exactly once
+# and drops to an interactive bash on exit — the idle pane is then the
+# reap_ephemeral_idle reaper's job, and a clean exit-self can no longer
+# be misread as a crash and respawned into a /exit-menu stall.
+def _respawn_cmd(
+    agent: str = "@orchestrator",
+    *,
+    model: str = "",
+    agent_class: str = "persistent",
+) -> str:
+    """Return the per-pane bring-up command for ``agent``.
 
+    For ``agent_class="persistent"`` (default): an infinite respawn loop
+    that writes ``restart_pending.<agent>.json`` after each exit so the
+    watchdog can inject a continuation prompt into the fresh instance.
     The marker is a JSON file with timestamp + reason + agent. If
     restart_session() already wrote one (programmatic restart), the loop
     overwrites it with a fresh timestamp — harmless, and ensures the
     grace period resets to when the new process actually starts.
+
+    For ``agent_class="ephemeral"``: a one-shot — claude runs once, and
+    on exit (clean or otherwise) the pane drops to an interactive bash
+    so :func:`metasphere.agents.reap_ephemeral_idle` cleans up the tmux
+    session via its session_activity timer. No respawn marker is
+    written, which is what stops the watchdog from injecting a
+    continuation into a non-existent successor (2026-05-05
+    research-monitor zombies: clean exit-self → respawn loop → fresh
+    claude stuck on /exit slash menu).
 
     If ``model`` is set, the claude invocation includes ``--model <model>``
     so the agent runs on a specific Anthropic model (e.g. Haiku for
@@ -51,6 +73,22 @@ def _respawn_cmd(agent: str = "@orchestrator", *, model: str = "") -> str:
     """
     safe_agent = agent.replace("'", "")  # paranoia
     model_flag = f" --model {model}" if model else ""
+
+    if agent_class == "ephemeral":
+        # No respawn loop. ``exec bash`` after claude exits leaves the
+        # pane idle at an interactive shell so reap_ephemeral_idle can
+        # collect it on its session_activity timer.
+        return (
+            "exec bash -c '"
+            'export METASPHERE_PROJECT_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || echo "$METASPHERE_PROJECT_ROOT")"; '
+            "export CLAUDE_CODE_DISABLE_FEEDBACK_SURVEY=1 "
+            "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1; "
+            f"claude --dangerously-skip-permissions{model_flag}; "
+            'ec=$?; echo "[gateway] claude exited ($ec), ephemeral — pane idle for reap"; '
+            "exec bash"
+            "'"
+        )
+
     return (
         "exec bash -c '"
         'STATE_DIR="$HOME/.metasphere/state"; '

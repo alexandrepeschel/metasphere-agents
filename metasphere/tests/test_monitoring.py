@@ -195,6 +195,82 @@ def test_tmux_counters_recognises_project_scoped_persistent(
     assert c.ephemeral == 0
 
 
+# ---------------------------------------------------------------------------
+# class sidecar override (PR #73 follow-up — MATERIAL critic finding)
+#
+# _session_is_persistent must converge on the same is_persistent semantics
+# as AgentRecord. Without sidecar awareness, tmux_counters reports
+# class=ephemeral agents (with MISSION.md kept for harness rendering) as
+# persistent, contradicting reap_ephemeral_idle / list-filter UIs / cli
+# output that all read AgentRecord.is_persistent. Single source of truth.
+# ---------------------------------------------------------------------------
+
+
+def test_tmux_counters_global_class_ephemeral_overrides_mission(
+    tmp_paths: Paths, monkeypatch,
+):
+    """Global agent dir with MISSION.md AND class=ephemeral sidecar must
+    count as ephemeral in tmux_counters. Mirrors
+    test_class_sidecar_ephemeral_overrides_mission_presence in test_agents."""
+    d = tmp_paths.agents / "@brand-mentions"
+    d.mkdir(parents=True, exist_ok=True)
+    (d / "MISSION.md").write_text("monitor the brand")
+    (d / "class").write_text("ephemeral\n")
+
+    monkeypatch.setattr(
+        mon, "_tmux_list_sessions",
+        lambda: ["metasphere-brand-mentions"],
+    )
+    c = mon.tmux_counters(tmp_paths)
+    assert c.total == 1
+    assert c.persistent == 0, (
+        "class=ephemeral sidecar must override MISSION.md in tmux_counters"
+    )
+    assert c.ephemeral == 1
+
+
+def test_tmux_counters_project_scoped_class_ephemeral_overrides_mission(
+    tmp_paths: Paths, monkeypatch,
+):
+    """Project-scoped agent (the actual research-monitor layout — under
+    ~/.metasphere/projects/research/agents/@brand-mentions/) with
+    MISSION.md AND class=ephemeral sidecar must count as ephemeral."""
+    pdir = tmp_paths.projects / "research" / "agents" / "@brand-mentions"
+    pdir.mkdir(parents=True, exist_ok=True)
+    (pdir / "MISSION.md").write_text("scan and exit-self")
+    (pdir / "class").write_text("ephemeral\n")
+
+    monkeypatch.setattr(
+        mon, "_tmux_list_sessions",
+        lambda: ["metasphere-research-brand-mentions"],
+    )
+    c = mon.tmux_counters(tmp_paths)
+    assert c.total == 1
+    assert c.persistent == 0, (
+        "class=ephemeral sidecar must override MISSION.md on the "
+        "project-scoped path too"
+    )
+    assert c.ephemeral == 1
+
+
+def test_tmux_counters_class_persistent_no_mission_counts_persistent(
+    tmp_paths: Paths, monkeypatch,
+):
+    """Symmetric guard: class=persistent sidecar with NO MISSION.md
+    must count as persistent. Mirrors the AgentRecord-side test."""
+    d = tmp_paths.agents / "@long-lived"
+    d.mkdir(parents=True, exist_ok=True)
+    (d / "class").write_text("persistent\n")
+
+    monkeypatch.setattr(
+        mon, "_tmux_list_sessions",
+        lambda: ["metasphere-long-lived"],
+    )
+    c = mon.tmux_counters(tmp_paths)
+    assert c.persistent == 1
+    assert c.ephemeral == 0
+
+
 def test_tmux_counters_empty_when_no_tmux(monkeypatch, tmp_paths: Paths):
     monkeypatch.setattr(mon, "_tmux_list_sessions", lambda: [])
     c = mon.tmux_counters(tmp_paths)

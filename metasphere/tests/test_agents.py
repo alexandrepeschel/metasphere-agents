@@ -53,6 +53,74 @@ def test_is_persistent_requires_mission(tmp_paths: Paths):
 
 
 # ---------------------------------------------------------------------------
+# class sidecar override (2026-05-05 research-monitor zombies)
+#
+# An agent with MISSION.md AND a ``class=ephemeral`` sidecar must classify
+# as ephemeral — the sidecar is the authoritative override. This is the
+# load-bearing knob for the research-monitor reclassify: those agents
+# keep their MISSION.md (the harness/payload renderer needs it) while
+# their lifecycle treatment flips to ephemeral so reap_ephemeral_idle
+# can collect their idle panes after the cron payload finishes.
+# ---------------------------------------------------------------------------
+
+
+def test_class_sidecar_ephemeral_overrides_mission_presence(tmp_paths: Paths):
+    """MISSION.md present + class=ephemeral sidecar → not persistent.
+    This is the exact configuration the morning research-monitors land
+    in once their dirs get the class flip."""
+    d = tmp_paths.agents / "@brand-mentions"
+    d.mkdir(parents=True)
+    (d / "MISSION.md").write_text("monitor the brand")
+    (d / "class").write_text("ephemeral\n")
+    rec = agents._agent_record_from_dir(d)
+    assert rec.agent_class == "ephemeral"
+    assert rec.is_persistent is False
+
+
+def test_class_sidecar_persistent_overrides_missing_mission(tmp_paths: Paths):
+    """No MISSION.md + class=persistent sidecar → persistent. Symmetric
+    to the ephemeral override at the AgentRecord dataclass layer.
+
+    Scope note: this asserts the dataclass-level classification only —
+    ``wake_persistent`` itself still raises ValueError on MISSION-absent
+    before reaching ``rec.is_persistent``, so a ``class=persistent``
+    sidecar without MISSION.md cannot wake a tmux REPL today. The
+    override matters for downstream consumers (lifecycle reapers,
+    counters, list filters) that classify an already-known agent
+    dir."""
+    d = tmp_paths.agents / "@declared-persistent"
+    d.mkdir(parents=True)
+    (d / "class").write_text("persistent\n")
+    rec = agents._agent_record_from_dir(d)
+    assert rec.agent_class == "persistent"
+    assert rec.is_persistent is True
+
+
+def test_class_sidecar_garbage_falls_back_to_mission_heuristic(tmp_paths: Paths):
+    """Unrecognised class value (typo, partial write) is ignored — the
+    MISSION.md heuristic stays in charge. Prevents a malformed sidecar
+    from silently flipping classification."""
+    d = tmp_paths.agents / "@typo"
+    d.mkdir(parents=True)
+    (d / "MISSION.md").write_text("mission")
+    (d / "class").write_text("EPHMERAL\n")  # typo
+    rec = agents._agent_record_from_dir(d)
+    assert rec.agent_class is None
+    assert rec.is_persistent is True
+
+
+def test_class_sidecar_empty_falls_back_to_mission_heuristic(tmp_paths: Paths):
+    """Empty class file is ignored — same fallback path as garbage."""
+    d = tmp_paths.agents / "@empty-class"
+    d.mkdir(parents=True)
+    (d / "MISSION.md").write_text("mission")
+    (d / "class").write_text("")
+    rec = agents._agent_record_from_dir(d)
+    assert rec.agent_class is None
+    assert rec.is_persistent is True
+
+
+# ---------------------------------------------------------------------------
 # _resolve_scope (path-doubling regression)
 # ---------------------------------------------------------------------------
 
@@ -345,6 +413,101 @@ def test_wake_persistent_project_scoped_uses_project_cwd(tmp_paths: Paths, tmp_p
     assert new_session[cwd_idx] == str(proj_path), (
         f"expected cwd={proj_path}, got {new_session[cwd_idx]}"
     )
+
+
+def test_wake_persistent_threads_ephemeral_class_into_respawn_cmd(tmp_paths: Paths):
+    """An agent with a ``class=ephemeral`` sidecar must get the
+    ephemeral respawn shape (no while-true loop) sent to its tmux pane.
+    This is the cron-fire integration premise: schedule fires, wake_persistent
+    cold-starts the session, claude runs once, exits cleanly, and the pane
+    falls back to bash for reap_ephemeral_idle to pick up. The bug closed:
+    persistent-shape respawn loops a clean exit-self into a /exit-menu stall.
+    """
+    d = _make_persistent(tmp_paths, "@ephemeral-cron")
+    (d / "class").write_text("ephemeral\n")
+
+    send_keys_calls: list[list[str]] = []
+
+    def fake_run(cmd, *args, **kwargs):
+        cp = MagicMock()
+        cp.stdout = ""
+        cp.stderr = ""
+        if "has-session" in cmd:
+            cp.returncode = 1  # cold start
+        elif "capture-pane" in cmd:
+            cp.returncode = 0
+            cp.stdout = "bypass permissions on"
+        elif "send-keys" in cmd:
+            cp.returncode = 0
+            send_keys_calls.append(list(cmd))
+        else:
+            cp.returncode = 0
+        return cp
+
+    with patch("metasphere.agents.subprocess.run", side_effect=fake_run):
+        agents.wake_persistent("@ephemeral-cron", paths=tmp_paths)
+
+    # The respawn command is the send-keys call whose argv contains
+    # ``claude --dangerously-skip-permissions``. Find it and assert
+    # ephemeral shape: no infinite respawn loop, no restart marker.
+    respawn_calls = [
+        c for c in send_keys_calls
+        if any("claude --dangerously-skip-permissions" in part for part in c)
+    ]
+    assert respawn_calls, (
+        f"expected a send-keys call carrying the claude respawn cmd; "
+        f"got {send_keys_calls}"
+    )
+    respawn_cmd = " ".join(respawn_calls[0])
+    assert "while true" not in respawn_cmd, (
+        "ephemeral-classed agent must NOT receive a while-true respawn loop"
+    )
+    assert "restart_pending" not in respawn_cmd, (
+        "ephemeral-classed agent must NOT write a restart marker (the "
+        "watchdog injects continuations on those, which is the failure "
+        "mode this fix closes)"
+    )
+    assert "exec bash" in respawn_cmd, (
+        "ephemeral-classed agent must drop to interactive bash on exit "
+        "so reap_ephemeral_idle picks up the idle pane"
+    )
+
+
+def test_wake_persistent_default_class_keeps_loop(tmp_paths: Paths):
+    """Backward-compat: an agent with no class sidecar (MISSION.md only)
+    keeps the persistent-shape respawn loop. Ensures the class change
+    doesn't silently downgrade existing persistent agents."""
+    _make_persistent(tmp_paths, "@plain-persistent")
+
+    send_keys_calls: list[list[str]] = []
+
+    def fake_run(cmd, *args, **kwargs):
+        cp = MagicMock()
+        cp.stdout = ""
+        cp.stderr = ""
+        if "has-session" in cmd:
+            cp.returncode = 1
+        elif "capture-pane" in cmd:
+            cp.returncode = 0
+            cp.stdout = "bypass permissions on"
+        elif "send-keys" in cmd:
+            cp.returncode = 0
+            send_keys_calls.append(list(cmd))
+        else:
+            cp.returncode = 0
+        return cp
+
+    with patch("metasphere.agents.subprocess.run", side_effect=fake_run):
+        agents.wake_persistent("@plain-persistent", paths=tmp_paths)
+
+    respawn_calls = [
+        c for c in send_keys_calls
+        if any("claude --dangerously-skip-permissions" in part for part in c)
+    ]
+    assert respawn_calls
+    respawn_cmd = " ".join(respawn_calls[0])
+    assert "while true" in respawn_cmd
+    assert "restart_pending.@plain-persistent.json" in respawn_cmd
 
 
 def test_wake_persistent_already_alive_injects_task(tmp_paths: Paths):
@@ -876,6 +1039,104 @@ def test_reap_ephemeral_idle_threshold_just_over_does_reap(tmp_paths: Paths):
 
     assert reaped == ["metasphere-boundary-high"]
     assert kill_sessions == ["metasphere-boundary-high"]
+
+
+def test_reap_ephemeral_idle_reaps_class_ephemeral_with_mission(tmp_paths: Paths):
+    """Cron-fire integration premise: a research-monitor-style agent
+    with MISSION.md AND ``class=ephemeral`` is reap-eligible for
+    reap_ephemeral_idle. Without the class sidecar, the MISSION.md
+    heuristic would mark it persistent and reap_ephemeral_idle would
+    skip it (the lane that produced the 2026-05-05 zombie pile-up).
+
+    Asserts the LAST link of the dependency chain the lead flagged:
+    schedule daemon fires → wake spins up tmux+REPL → claude exits clean
+    → ephemeral respawn drops to bash (covered by the wake test above)
+    → reap_ephemeral_idle picks the idle pane up at threshold.
+    """
+    import time as _real_time
+
+    # Simulate the post-cron-fire on-disk shape: MISSION.md present
+    # (rendered by wake), class=ephemeral sidecar (instance-flipped).
+    d = tmp_paths.agents / "@research-monitor-style"
+    d.mkdir(parents=True)
+    (d / "MISSION.md").write_text("scan and exit-self")
+    (d / "class").write_text("ephemeral\n")
+    (d / "scope").write_text(str(tmp_paths.project_root))
+    (d / "status").write_text("spawned: scan\n")
+
+    # The agent's tmux session has been idle past the threshold (claude
+    # exited cleanly; bash has been silent since).
+    just_over = str(int(_real_time.time()) - 1801)
+    kill_sessions: list[str] = []
+
+    def fake_run(cmd, *args, **kwargs):
+        cp = MagicMock()
+        cp.stdout = ""
+        cp.stderr = ""
+        if "list-sessions" in cmd:
+            cp.returncode = 0
+            cp.stdout = "metasphere-research-monitor-style\n"
+        elif "display-message" in cmd:
+            cp.returncode = 0
+            cp.stdout = just_over
+        elif "kill-session" in cmd:
+            cp.returncode = 0
+            kill_sessions.append(cmd[cmd.index("-t") + 1])
+        else:
+            cp.returncode = 0
+        return cp
+
+    with patch("metasphere.agents.subprocess.run", side_effect=fake_run):
+        reaped = agents.reap_ephemeral_idle(
+            paths=tmp_paths, max_idle_seconds=1800
+        )
+
+    assert reaped == ["metasphere-research-monitor-style"], (
+        f"class=ephemeral with MISSION.md must be reap-eligible; got {reaped}"
+    )
+    assert kill_sessions == ["metasphere-research-monitor-style"]
+
+
+def test_reap_ephemeral_idle_still_skips_class_persistent(tmp_paths: Paths):
+    """Symmetric guard: an agent without MISSION.md but with
+    ``class=persistent`` sidecar must NOT be reaped by
+    reap_ephemeral_idle. The class sidecar has to flip BOTH directions
+    or it's only half a feature."""
+    import time as _real_time
+
+    d = tmp_paths.agents / "@long-lived"
+    d.mkdir(parents=True)
+    (d / "class").write_text("persistent\n")
+    (d / "scope").write_text(str(tmp_paths.project_root))
+    (d / "status").write_text("active\n")
+
+    just_over = str(int(_real_time.time()) - 1801)
+
+    def fake_run(cmd, *args, **kwargs):
+        cp = MagicMock()
+        cp.stdout = ""
+        cp.stderr = ""
+        if "list-sessions" in cmd:
+            cp.returncode = 0
+            cp.stdout = "metasphere-long-lived\n"
+        elif "display-message" in cmd:
+            cp.returncode = 0
+            cp.stdout = just_over
+        elif "kill-session" in cmd:
+            raise AssertionError(
+                f"persistent-classed agent must not be killed by "
+                f"reap_ephemeral_idle; got {cmd!r}"
+            )
+        else:
+            cp.returncode = 0
+        return cp
+
+    with patch("metasphere.agents.subprocess.run", side_effect=fake_run):
+        reaped = agents.reap_ephemeral_idle(
+            paths=tmp_paths, max_idle_seconds=1800
+        )
+
+    assert reaped == []
 
 
 def test_reap_ephemeral_idle_skips_unknown_sessions(tmp_paths: Paths):
