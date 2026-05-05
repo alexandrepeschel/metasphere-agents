@@ -1120,29 +1120,65 @@ setup_daemon_linux() {
     fi
 
     local service_dir="$HOME/.config/systemd/user"
-    local service_file="$service_dir/metasphere.service"
+    local template_dir="$SCRIPT_DIR/systemd/user"
+    local venv_bin="$METASPHERE_DIR/venv/bin/metasphere"
 
     mkdir -p "$service_dir"
+    mkdir -p "$METASPHERE_DIR/logs"
 
-    cat > "$service_file" << EOF
-[Unit]
-Description=Metasphere - Multi-agent orchestration
-After=network.target
+    # Phase out the obsolete omnibus metasphere.service. It shipped a
+    # single ExecStart=metasphere run that doesn't exist as a CLI verb
+    # and was superseded by the three split daemons (gateway, heartbeat,
+    # schedule) during the Python rewrite. Stop+disable+remove cleanly
+    # so a daemon-reload picks up the split units as the source of
+    # truth.
+    local obsolete_omnibus="$service_dir/metasphere.service"
+    if [[ -f "$obsolete_omnibus" ]]; then
+        systemctl --user stop metasphere.service 2>/dev/null || true
+        systemctl --user disable metasphere.service 2>/dev/null || true
+        rm -f "$obsolete_omnibus"
+        ok "Removed obsolete metasphere.service (superseded by split daemons)"
+    fi
 
-[Service]
-Type=simple
-ExecStart=$METASPHERE_DIR/bin/metasphere run
-Restart=always
-RestartSec=10
-Environment=METASPHERE_DIR=$METASPHERE_DIR
-Environment=PATH=/usr/local/bin:/usr/bin:/bin:%h/.local/bin:$METASPHERE_DIR/bin
-
-[Install]
-WantedBy=default.target
-EOF
+    # Render the three split daemon units from repo templates. Markers
+    # (@@METASPHERE_DIR@@, @@METASPHERE_PROJECT_ROOT@@, @@METASPHERE_VENV_BIN@@)
+    # get install-time-substituted with operator-detected absolute
+    # paths. Re-rendering on every install is intentional: it overwrites
+    # any hand-written drift (e.g. the manual gateway/heartbeat/schedule
+    # units that predate this template scheme) so the templates are the
+    # source of truth.
+    local rendered_any=false
+    local daemon
+    for daemon in gateway heartbeat schedule; do
+        local tmpl="$template_dir/metasphere-$daemon.service"
+        local out="$service_dir/metasphere-$daemon.service"
+        if [[ ! -f "$tmpl" ]]; then
+            warn "Missing template $tmpl — skipping $daemon"
+            continue
+        fi
+        local tmp
+        tmp=$(mktemp)
+        sed \
+            -e "s|@@METASPHERE_DIR@@|$METASPHERE_DIR|g" \
+            -e "s|@@METASPHERE_PROJECT_ROOT@@|$SCRIPT_DIR|g" \
+            -e "s|@@METASPHERE_VENV_BIN@@|$venv_bin|g" \
+            "$tmpl" > "$tmp"
+        # Idempotent write: only overwrite if content changed, so a
+        # second install.sh run is a no-op and `systemctl restart`
+        # stays scoped to actual updates.
+        if [[ ! -f "$out" ]] || ! cmp -s "$tmp" "$out"; then
+            mv "$tmp" "$out"
+            rendered_any=true
+            ok "Rendered metasphere-$daemon.service"
+        else
+            rm -f "$tmp"
+        fi
+    done
 
     systemctl --user daemon-reload
-    ok "Created systemd service"
+    if $rendered_any; then
+        ok "Reloaded systemd user units"
+    fi
 
     # Disable the standalone telegram poller if present — the gateway
     # daemon handles telegram polling. Running both causes a getUpdates
@@ -1156,18 +1192,44 @@ EOF
         fi
     done
 
+    # Enable so the daemons come up on boot, and start any that aren't
+    # already running. Crucially, we do NOT auto-restart already-active
+    # units even if the rendered content changed: the gateway is the
+    # tmux session manager, so `systemctl restart metasphere-gateway`
+    # tears down every live agent tmux session as a side effect. Re-
+    # running install.sh on a host with active agents must not surprise
+    # the operator. If a unit was rendered into place AND was already
+    # running, we surface a "manual restart needed" notice instead.
+    local restart_pending=()
+    local start_now=true
     if $INTERACTIVE; then
-        read -p "Start metasphere daemon now? [Y/n] " -n 1 -r
+        read -p "Enable + start metasphere daemons now? [Y/n] " -n 1 -r
         echo
-        if [[ ! $REPLY =~ ^[Nn]$ ]]; then
-            systemctl --user enable metasphere
-            systemctl --user start metasphere
-            ok "Daemon started"
-        fi
-    else
-        systemctl --user enable metasphere
-        systemctl --user start metasphere
-        ok "Daemon started"
+        [[ $REPLY =~ ^[Nn]$ ]] && start_now=false
+    fi
+
+    if $start_now; then
+        for daemon in gateway heartbeat schedule; do
+            systemctl --user enable "metasphere-$daemon.service" >/dev/null 2>&1 || true
+            if systemctl --user is-active "metasphere-$daemon.service" &>/dev/null; then
+                if $rendered_any; then
+                    restart_pending+=("metasphere-$daemon.service")
+                fi
+            else
+                systemctl --user start "metasphere-$daemon.service"
+            fi
+        done
+        ok "Daemons enabled (gateway, heartbeat, schedule)"
+    fi
+
+    if (( ${#restart_pending[@]} > 0 )); then
+        warn "Updated unit(s) are already running with the OLD definition:"
+        for unit in "${restart_pending[@]}"; do
+            echo "    - $unit"
+        done
+        echo "    Restarting metasphere-gateway also reaps every live agent"
+        echo "    tmux session. Schedule a maintenance window, then:"
+        echo "        systemctl --user restart ${restart_pending[*]}"
     fi
 }
 
@@ -1296,7 +1358,7 @@ show_completion() {
         echo "  launchctl list | grep metasphere"
         echo "  tail -f $METASPHERE_DIR/logs/gateway.log"
     else
-        echo "  systemctl --user status metasphere-gateway"
+        echo "  systemctl --user status metasphere-gateway metasphere-heartbeat metasphere-schedule"
         echo "  journalctl --user -u metasphere-gateway -f"
     fi
     echo
