@@ -99,8 +99,13 @@ def should_skip_silent_tick(text: str | None) -> bool:
     stripped = text.strip()
     if not stripped:
         return True
-    # Match the standardized idle token and common variants
+    # Match the standardized idle token and common variants at the start.
     if _IDLE_PATTERN.match(stripped):
+        return True
+    # Also strip any trailing-idle token: if the entire turn collapses to
+    # empty after the trailer is removed, treat it as a silent tick (e.g.
+    # the agent emitted just ``[idle]\n[idle]`` or whitespace + trailer).
+    if not _strip_trailing_idle(stripped):
         return True
     return False
 
@@ -246,6 +251,34 @@ _IDLE_PATTERN = _re.compile(
     _re.IGNORECASE,
 )
 
+# Trailer counterpart to ``_IDLE_PATTERN``: matches the standardized
+# ``[idle]`` token at end of text. Agents append it as a turn-end signal
+# after substantive prose. Without stripping the trailer, Telegram
+# receives the substantive prose WITH a dangling ``[idle]`` — the exact
+# UX failure the token is supposed to prevent (2026-05-05: found 6/31
+# recent @orchestrator turns leaking the trailer). One or more
+# consecutive ``[idle]`` tokens are stripped (handles ``foo\n\n[idle]``
+# and ``foo\n\n[idle]\n[idle]``).
+#
+# Deliberately narrower than ``_IDLE_PATTERN``: the free-form variants
+# (``standing by``, ``idle.``, ``nothing new``…) are not stripped as a
+# trailer because each of them is a real English phrase that legitimate
+# substantive prose can end on (``…the user is now idle.``). The
+# standardized ``[idle]`` token is self-delimiting and unambiguous;
+# free-form variants stay covered by the start-anchored ``_IDLE_PATTERN``
+# for bare-token turns.
+_TRAILING_IDLE_PATTERN = _re.compile(r"(?:\s*\[idle\])+\s*\Z", _re.IGNORECASE)
+
+
+def _strip_trailing_idle(text: str) -> str:
+    """Strip trailing idle/standing-by tokens from the end of ``text``.
+
+    Idempotent. Returns the cleaned text with any trailing whitespace
+    also removed. Substantive prose preceding the trailer is preserved
+    so it can still reach Telegram — only the dangling token is removed.
+    """
+    return _TRAILING_IDLE_PATTERN.sub("", text).rstrip()
+
 
 def route_to_telegram(text: str, paths: Paths) -> None:
     """Send ``text`` to Telegram, deduping
@@ -254,8 +287,17 @@ def route_to_telegram(text: str, paths: Paths) -> None:
     if not text:
         return
 
+    # Strip trailing-idle tokens so substantive prose forwards cleanly
+    # without a dangling ``[idle]`` (the start-anchored ``_IDLE_PATTERN``
+    # only catches BARE turns; agents emitting ``<prose>\n\n[idle]`` got
+    # past it). If the trailer-strip leaves nothing, the turn was all
+    # silence after all — drop it.
+    text = _strip_trailing_idle(text.strip())
+    if not text:
+        return
+
     # Filter idle-tick placeholders — never forward these.
-    if _IDLE_PATTERN.match(text.strip()):
+    if _IDLE_PATTERN.match(text):
         return
 
     digest = _hash_text(text)

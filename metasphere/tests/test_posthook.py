@@ -172,6 +172,72 @@ def test_should_skip_silent_tick_matches_route_to_telegram():
         )
 
 
+# ---------- trailing-idle stripper (2026-05-05 trailer-leak) ----------
+#
+# Agents emit substantive prose followed by ``[idle]`` as a turn-end
+# signal. The start-anchored ``_IDLE_PATTERN`` correctly catches BARE
+# ``[idle]`` turns but misses ``<prose>\n\n[idle]`` — the trailer
+# leaks through to Telegram alongside the substantive prose. ~19% of
+# recent @orchestrator turns observed leaking on 2026-05-05.
+# ----------------------------------------------------------------------
+
+
+def test_strip_trailing_idle_removes_trailer_keeps_prose():
+    """The substantive prose ahead of the trailer must survive intact;
+    only the dangling ``[idle]`` token (with surrounding whitespace) is
+    removed. This is the load-bearing behaviour: legit non-idle text
+    DOES reach Telegram, the trailer DOES NOT."""
+    text = (
+        "ww-lead acknowledged + dispatched eng with compound audit. "
+        "ETA 2-4h. No fork for Julian — informational pass-through."
+        "\n\n[idle]"
+    )
+    cleaned = posthook._strip_trailing_idle(text)
+    assert cleaned == (
+        "ww-lead acknowledged + dispatched eng with compound audit. "
+        "ETA 2-4h. No fork for Julian — informational pass-through."
+    )
+
+
+def test_strip_trailing_idle_handles_repeated_trailers():
+    """Repeated trailer tokens (``[idle]\\n[idle]``) collapse together —
+    the regex matches one or more consecutive trailers."""
+    assert posthook._strip_trailing_idle("done\n\n[idle]\n[idle]") == "done"
+
+
+def test_strip_trailing_idle_does_not_strip_freeform_variants_at_end():
+    """Deliberately narrower than ``_IDLE_PATTERN``: free-form variants
+    (``standing by``, ``idle.``, ``nothing new``…) are real English
+    phrases that legitimate prose can end on (``…the user is now
+    idle.``). Only the standardized self-delimiting ``[idle]`` token is
+    treated as a strippable trailer. Free-form bare-token turns stay
+    covered by the start-anchored ``_IDLE_PATTERN`` (see
+    ``test_should_skip_silent_tick_prefix_variants``)."""
+    assert posthook._strip_trailing_idle("done\n\nstanding by") == "done\n\nstanding by"
+    assert posthook._strip_trailing_idle("the user is now idle.") == "the user is now idle."
+
+
+def test_strip_trailing_idle_idempotent_on_clean_text():
+    """No trailer → text returned untouched (modulo trailing whitespace)."""
+    assert posthook._strip_trailing_idle("plain prose") == "plain prose"
+    assert posthook._strip_trailing_idle("PR #14 merged cleanly.") == "PR #14 merged cleanly."
+
+
+def test_strip_trailing_idle_does_not_touch_idle_word_mid_sentence():
+    """Substantive prose with ``idle`` mid-sentence and no trailer must
+    survive — same negative-coverage promise as ``_IDLE_PATTERN``."""
+    text = "We should report the idle metric to the dashboard"
+    assert posthook._strip_trailing_idle(text) == text
+
+
+def test_should_skip_silent_tick_skips_pure_trailer_only_text():
+    """If the entire turn is just trailer tokens (whitespace + [idle] +
+    [idle] + whitespace), should_skip_silent_tick must catch it.
+    Defense-in-depth alongside the start-anchored match."""
+    assert posthook.should_skip_silent_tick("\n\n[idle]\n[idle]\n") is True
+    assert posthook.should_skip_silent_tick("   [idle]   ") is True
+
+
 # ---------- route_to_telegram ----------
 
 def _write_chat_id(paths: Paths) -> None:
@@ -191,6 +257,41 @@ def test_route_to_telegram_sends_once_and_dedupes(tmp_paths: Paths):
     assert args[1] == "hello world"
     # Hash file persisted
     assert (tmp_paths.state / "posthook_last_sent").exists()
+
+
+def test_route_to_telegram_strips_trailing_idle_before_sending(tmp_paths: Paths):
+    """Real-world repro from @orchestrator's transcript 2026-05-05:
+    substantive prose followed by ``\\n\\n[idle]``. The send must go
+    through with the substantive prose, but the trailing ``[idle]``
+    must be stripped — not forwarded to Julian's Telegram."""
+    _write_chat_id(tmp_paths)
+    payload = (
+        "ww-lead acknowledged + dispatched eng with compound audit. "
+        "ETA 2-4h. No fork for Julian.\n\n[idle]"
+    )
+    with mock.patch("metasphere.telegram.api.send_message") as m:
+        m.return_value = [{"ok": True}]
+        posthook.route_to_telegram(payload, tmp_paths)
+    assert m.call_count == 1
+    sent = m.call_args[0][1]
+    assert "[idle]" not in sent, (
+        f"trailing [idle] must not reach Telegram; got: {sent!r}"
+    )
+    assert sent == (
+        "ww-lead acknowledged + dispatched eng with compound audit. "
+        "ETA 2-4h. No fork for Julian."
+    )
+
+
+def test_route_to_telegram_drops_trailer_only_text(tmp_paths: Paths):
+    """If the whole turn is just trailer tokens (e.g. accidentally double
+    [idle]), nothing should reach Telegram. Defense-in-depth alongside
+    the start-anchored ``_IDLE_PATTERN`` filter."""
+    _write_chat_id(tmp_paths)
+    with mock.patch("metasphere.telegram.api.send_message") as m:
+        posthook.route_to_telegram("\n\n[idle]\n[idle]\n", tmp_paths)
+        posthook.route_to_telegram("   [idle]   ", tmp_paths)
+    assert m.call_count == 0
 
 
 def test_route_to_telegram_distinct_messages_both_sent(tmp_paths: Paths):
