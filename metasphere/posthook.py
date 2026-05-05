@@ -324,7 +324,7 @@ def _resolve_chat_id(paths: Paths) -> str | None:
     Resolution order matches the install-script defaults:
 
     1. ``$paths.config/telegram.env`` parsed for ``TELEGRAM_CHAT_ID=...``
-       (the canonical openclaw/install-script layout — KEY=VALUE env file).
+       (the canonical install-script layout — KEY=VALUE env file).
     2. ``$paths.config/telegram_chat_id`` (one-line bare value).
     3. ``$paths.root/telegram_chat_id`` (legacy fallback).
 

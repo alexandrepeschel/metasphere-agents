@@ -40,11 +40,12 @@ def parse_env_file(path: Path) -> dict[str, str]:
 def load_env_to_environ(paths: Paths | None = None) -> int:
     """Export ``~/.metasphere/config/*.env`` keys into ``os.environ``.
 
-    Reads every ``*.env`` file plus the bare ``env`` catch-all (the file
-    spot uses for API keys without the ``.env`` suffix). For each parsed
-    key, calls ``os.environ.setdefault`` so values explicitly set in the
-    process env take precedence — operators can override per-invocation
-    via shell ``KEY=value pytest ...`` without editing the file.
+    Reads every ``*.env`` file plus the bare ``env`` catch-all (a
+    legacy extension-less file some installs use for API keys). For
+    each parsed key, calls ``os.environ.setdefault`` so values
+    explicitly set in the process env take precedence — operators
+    can override per-invocation via shell ``KEY=value pytest ...``
+    without editing the file.
 
     Returns the number of keys written. Idempotent: running it twice
     leaves the environment unchanged the second time.

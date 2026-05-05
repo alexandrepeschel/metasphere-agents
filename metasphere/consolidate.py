@@ -451,9 +451,9 @@ def _agent_exists_anywhere(agent_id: str, paths: Paths) -> bool:
     Distinguishes a GC'd ephemeral (returns False — task is orphan) from
     a live ephemeral (dir still present with status/task/etc) or a
     persistent agent. Ephemerals can live either at the global root
-    (~/.metasphere/agents/@x/) or under a project (e.g.
-    ~/.metasphere/projects/<proj>/agents/@x/, where @explorer lives),
-    so both locations must be checked.
+    (~/.metasphere/agents/@x/) or under a project
+    (~/.metasphere/projects/<proj>/agents/@x/), so both locations
+    must be checked.
     """
     if not agent_id or agent_id == "@unassigned":
         return False
@@ -760,7 +760,8 @@ def apply_verdict(
     # "noop" actions (ACTIVE/BLOCKED/PAUSED tasks classified, no
     # side effect taken) — at one consolidate fire every 5 minutes
     # × N active tasks, those events drown out actionable signal
-    # (measured 12.5k/day on spot 2026-04-25, 78% of task events).
+    # (~12.5k/day measured on a populated instance 2026-04-25,
+    # 78% of task events).
     # noop-pinged-out is preserved because it carries throttle
     # signal; archives, escalations, pings remain emitted as before.
     if result["action"] != "noop":
@@ -1103,9 +1104,9 @@ def apply_message_verdict(
                 result.update(_ping_msg_recipient(msg, paths, sender=sender))
 
     # Skip events for the pure-noop case (ACTIVE/PINNED messages
-    # classified, no side effect). At ~30k/day on spot 2026-04-25
-    # those drown the events log (55% of all events). Archives,
-    # escalations, and pings still emit.
+    # classified, no side effect). At ~30k/day on a populated
+    # instance 2026-04-25 those drown the events log (55% of all
+    # events). Archives, escalations, and pings still emit.
     if result["action"] != "noop":
         try:
             log_event(
