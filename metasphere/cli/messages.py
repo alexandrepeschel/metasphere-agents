@@ -64,6 +64,31 @@ def _cmd_send(args: list[str]) -> int:
         print('Usage: messages send @target !label "message"', file=sys.stderr)
         return 1
     target, label, *rest = args
+    # Reject flag-shaped target / label up front. ``msg send`` is purely
+    # positional — there are no named flags. Agents (and humans) coming
+    # in from ``metasphere telegram send --to <name>`` (which DOES use
+    # --to) confabulate the same shape here, and the silent
+    # ``target, label, *rest = args`` unpack accepts it: the message
+    # goes out with ``to: --to``, ``label: @whatever``, and the real
+    # body buried in the rest. Hard-fail so the corruption can't
+    # silently ship (2026-05-05: @rage-changelog and @explorer both
+    # shipped this in the same morning).
+    if target.startswith("--"):
+        print(
+            f"Error: target {target!r} looks like a flag — `msg send` "
+            "takes positional args. Use: "
+            'messages send @target !label "message"',
+            file=sys.stderr,
+        )
+        return 1
+    if label.startswith("--"):
+        print(
+            f"Error: label {label!r} looks like a flag — `msg send` "
+            "takes positional args. Use: "
+            'messages send @target !label "message"',
+            file=sys.stderr,
+        )
+        return 1
     body = " ".join(rest)
     p, agent = _ctx()
     msg = _msgs.send_message(target, label, body, agent, paths=p)
