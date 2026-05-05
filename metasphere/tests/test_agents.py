@@ -1041,6 +1041,88 @@ def test_reap_ephemeral_idle_threshold_just_over_does_reap(tmp_paths: Paths):
     assert kill_sessions == ["metasphere-boundary-high"]
 
 
+def test_reap_ephemeral_idle_unlinks_stale_deferred_cmd_marker(tmp_paths: Paths):
+    """When the reaper kills an ephemeral session, it must also unlink
+    that agent's ``state/<agent>_deferred_cmd`` marker if present.
+    Without this coupling, a stale marker (e.g. a `/exit` left when a
+    prior posthook never ran) would inject into the NEXT cron-fire's
+    fresh session before it could do any real work — the failure mode
+    @explorer found 2026-05-05 (4 markers from 2026-04-30 sitting on
+    the just-reaped research-monitor agents)."""
+    import time as _real_time
+
+    _make_ephemeral_dir(tmp_paths, "@brand-mentions")
+    # Leftover marker from a prior fire whose Stop hook never ran. The
+    # `safe_name` rule in posthook drops the leading @ — mirror it here.
+    paths_state = tmp_paths.state
+    paths_state.mkdir(parents=True, exist_ok=True)
+    marker = paths_state / "brand-mentions_deferred_cmd"
+    marker.write_text("/exit\n")
+    assert marker.exists()
+
+    just_over = str(int(_real_time.time()) - 1801)
+
+    def fake_run(cmd, *args, **kwargs):
+        cp = MagicMock()
+        cp.stdout = ""
+        cp.stderr = ""
+        if "list-sessions" in cmd:
+            cp.returncode = 0
+            cp.stdout = "metasphere-brand-mentions\n"
+        elif "display-message" in cmd:
+            cp.returncode = 0
+            cp.stdout = just_over
+        elif "kill-session" in cmd:
+            cp.returncode = 0
+        else:
+            cp.returncode = 0
+        return cp
+
+    with patch("metasphere.agents.subprocess.run", side_effect=fake_run):
+        reaped = agents.reap_ephemeral_idle(
+            paths=tmp_paths, max_idle_seconds=1800
+        )
+
+    assert reaped == ["metasphere-brand-mentions"]
+    assert not marker.exists(), (
+        "stale deferred_cmd marker must be unlinked when the reaper "
+        "kills the agent's session — otherwise it injects into the "
+        "next fire's fresh session"
+    )
+
+
+def test_reap_ephemeral_idle_no_marker_is_a_noop(tmp_paths: Paths):
+    """The unlink must be safe when no marker is present — the common
+    case. Reaper still kills the session, no error from unlink(missing_ok)."""
+    import time as _real_time
+
+    _make_ephemeral_dir(tmp_paths, "@no-marker")
+    just_over = str(int(_real_time.time()) - 1801)
+
+    def fake_run(cmd, *args, **kwargs):
+        cp = MagicMock()
+        cp.stdout = ""
+        cp.stderr = ""
+        if "list-sessions" in cmd:
+            cp.returncode = 0
+            cp.stdout = "metasphere-no-marker\n"
+        elif "display-message" in cmd:
+            cp.returncode = 0
+            cp.stdout = just_over
+        elif "kill-session" in cmd:
+            cp.returncode = 0
+        else:
+            cp.returncode = 0
+        return cp
+
+    with patch("metasphere.agents.subprocess.run", side_effect=fake_run):
+        reaped = agents.reap_ephemeral_idle(
+            paths=tmp_paths, max_idle_seconds=1800
+        )
+
+    assert reaped == ["metasphere-no-marker"]
+
+
 def test_reap_ephemeral_idle_reaps_class_ephemeral_with_mission(tmp_paths: Paths):
     """Cron-fire integration premise: a research-monitor-style agent
     with MISSION.md AND ``class=ephemeral`` is reap-eligible for

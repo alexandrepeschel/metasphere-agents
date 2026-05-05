@@ -969,6 +969,18 @@ def reap_ephemeral_idle(
         if idle is None or idle <= max_idle_seconds:
             continue
         _tmux_run("kill-session", "-t", session)
+        # Unlink any leftover ``state/<agent>_deferred_cmd`` marker.
+        # Without this, a stale "/exit" marker (left when a posthook
+        # never ran — e.g. the cron-fired session was killed externally
+        # before its Stop hook fired) would inject /exit into the next
+        # cron-fire's session before it could do any work (2026-04-30
+        # research-monitor markers found by @explorer 2026-05-05).
+        safe_name = rec.name.lstrip("@") or "orchestrator"
+        marker = paths.state / f"{safe_name}_deferred_cmd"
+        try:
+            marker.unlink(missing_ok=True)
+        except OSError:
+            pass
         try:
             log_event(
                 "agent.ephemeral_idle.reap",
