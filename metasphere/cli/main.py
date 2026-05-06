@@ -65,6 +65,7 @@ REGISTRY: dict[str, str] = {
     "logs":      "metasphere.cli.logs:main",
     "config":    "metasphere.cli.config:main",
     "audit-docs": "metasphere.cli.audit_docs:main",
+    "accounts":  "metasphere.cli.accounts:main",
 }
 
 _HELP = """\
@@ -91,6 +92,7 @@ Subcommands:
   project ...
   gateway status|daemon
   restart [<agent-name>]    Restart daemons + all agent sessions, or one agent
+  accounts list|current|switch|add|status   Manage OAuth credential profiles
   version                   Show version + commit hash
 
 Run `metasphere <subcommand> --help` for details.
