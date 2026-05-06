@@ -189,6 +189,28 @@ def probe_and_rotate(
 
         from .accounts import ACCOUNTS_DIR, LIVE_CRED
 
+        # Refuse to rotate when the live credentials file is a regular
+        # file rather than a metasphere-managed symlink.  Replacing it
+        # would clobber the user's original credentials with no backup,
+        # since a real file at LIVE_CRED was never imported into a
+        # profile.  The user must run ``metasphere accounts add`` and
+        # ``metasphere accounts switch`` to bring the file under
+        # management before the failsafe can act.
+        if LIVE_CRED.exists() and not LIVE_CRED.is_symlink():
+            try:
+                from ..events import log_event
+                log_event(
+                    "failsafe.skip_unmanaged",
+                    f"rate-limit detected but {LIVE_CRED} is not a "
+                    f"metasphere-managed symlink; skipping rotation to "
+                    f"avoid clobbering original credentials",
+                    agent="@orchestrator",
+                    paths=paths,
+                )
+            except Exception:
+                pass
+            return False
+
         next_name = _next_profile(ACCOUNTS_DIR, LIVE_CRED)
         if next_name is None:
             return False

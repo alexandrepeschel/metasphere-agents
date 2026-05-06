@@ -217,3 +217,33 @@ class TestProbeAndRotate:
             mock_sys.platform = "darwin"
             result = probe_and_rotate("fake-session", self._paths_stub())
         assert result is False
+
+    def test_skipped_when_live_cred_is_unmanaged_file(self, tmp_path):
+        """If LIVE_CRED is a regular file (not a symlink), rotation
+        would clobber the original credentials without backup.  The
+        failsafe must bail in that state."""
+        accts = _make_profiles(tmp_path, ["primary", "spare"])
+        # LIVE_CRED is a real file, NOT a symlink — the unmanaged state.
+        live = tmp_path / "live_cred.json"
+        original_content = '{"token": "real-original-creds"}'
+        live.write_text(original_content)
+
+        pane_with_limit = "rate_limit_error: quota exceeded"
+
+        import metasphere.cli.failsafe as fs
+        with (
+            patch("metasphere.cli.failsafe._capture_pane", return_value=pane_with_limit),
+            patch("metasphere.cli.accounts.ACCOUNTS_DIR", accts),
+            patch("metasphere.cli.accounts.LIVE_CRED", live),
+            patch("metasphere.events.log_event") as mock_log,
+        ):
+            fs._last_rotation_ts = float("-inf")
+            result = probe_and_rotate("fake-session", self._paths_stub())
+
+        assert result is False
+        # Original file content untouched, still a real file.
+        assert live.is_file() and not live.is_symlink()
+        assert live.read_text() == original_content
+        # Skip event was logged.
+        assert mock_log.called
+        assert mock_log.call_args[0][0] == "failsafe.skip_unmanaged"
