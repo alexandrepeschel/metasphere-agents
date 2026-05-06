@@ -199,6 +199,14 @@ def invoke_agent_heartbeat(
     if session_alive(session):
         from .tmux import submit_to_tmux as _tmux_submit
 
+        # Probe pane for rate-limit signals before injection so we can
+        # rotate credentials while the orchestrator is still idle.
+        try:
+            from .cli.failsafe import probe_and_rotate
+            probe_and_rotate(session, paths)
+        except Exception:
+            pass
+
         # defer_if_busy=True: if the input box shows typing (a human
         # is mid-keystroke), skip this tick — the next heartbeat will
         # retry. Prevents the 2026-04-16 "heartbeat took over my
