@@ -112,34 +112,28 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if cmd in ("exit-self", "exit_self"):
-        # Schedule a /exit into the caller's tmux pane via a detached
-        # background process. Resolves the caller from
-        # $METASPHERE_AGENT_ID and mirrors the C-c x2 + C-u + /exit +
-        # Enter x2 sequence used by ``gateway.session.restart_agent_session``.
+        # Schedule ``tmux kill-session -t <target>`` for the caller's
+        # own session via a detached background process. Resolves the
+        # caller from $METASPHERE_AGENT_ID.
         #
-        # Why detached: this command is itself running in the caller's
-        # pane (via the agent's Bash tool). Sending C-c via tmux
-        # send-keys to that same pane delivers SIGINT to the pane's
-        # foreground process — claude — which propagates the interrupt
-        # to its child (this metasphere CLI process). Calling the
-        # send-keys sequence inline would kill THIS process before
-        # ``/exit`` could be delivered, leaving claude alive and the
-        # pane zombied at "Interrupted · What should Claude do
-        # instead?" (observed 2026-05-03 across all 4 research-monitor
-        # cron fires). A detached child with start_new_session=True
-        # survives the parent's death; a short pre-sleep gives the
-        # caller's Bash tool time to return cleanly before the C-c
-        # arrives.
+        # History: this used to inject a C-c x2 + /exit + Enter x2
+        # keystroke sequence to graceful-exit claude. 3-day soak
+        # (2026-05-05 → 05-07) showed 0/10 successes — the keystrokes
+        # were ignored or buffered by mid-turn claude panes, and every
+        # event fell through to the 30-min ephemeral reaper anyway.
+        # Replaced with a hard session kill: simpler, deterministic,
+        # and the only consumers (cron-fired ephemerals flagged
+        # wants_exit_self_cleanup=True) want the tmux slot released
+        # outright. Persistent collaborators leave the flag False and
+        # never call this.
         #
-        # Behavior split downstream of /exit:
-        # - Persistent agents (respawn loop running in pane shell):
-        #   /exit kills claude → respawn loop spins fresh claude →
-        #   watchdog injects continuation prompt. Pane stays alive.
-        # - Ephemeral cron-fired agents (no respawn loop): /exit
-        #   kills claude → pane idles at shell prompt. The
-        #   ``reap_ephemeral_idle`` step in the lifecycle daemon
-        #   completes cleanup within the configured threshold
-        #   (default 30 min).
+        # Why detached + start_new_session: the kill targets the
+        # caller's own session, which contains this CLI process. Run
+        # inline, the kill would terminate ourselves before we could
+        # log_event or return. A detached child survives the parent's
+        # death; the pre-sleep gives the caller's Bash tool, any final
+        # assistant text, and the Stop hook room to complete before
+        # the session goes away.
         caller = os.environ.get("METASPHERE_AGENT_ID")
         if not caller:
             print("Error: $METASPHERE_AGENT_ID not set", file=sys.stderr)
@@ -155,22 +149,14 @@ def main(argv: list[str] | None = None) -> int:
             )
             return 1
         t = shlex.quote(target)
-        # 2.5s pre-sleep: long enough for this Bash tool to return and
-        # claude to begin emitting its final assistant text; short
-        # enough that the agent's pane is freed promptly. The sleep
-        # only delays the kill, not the agent — Stop hook fires
-        # naturally on turn end either way.
-        keystrokes_sh = (
-            f"sleep 2.5; "
-            f"tmux send-keys -t {t} C-c; sleep 0.3; "
-            f"tmux send-keys -t {t} C-c; sleep 0.3; "
-            f"tmux send-keys -t {t} C-u; sleep 0.2; "
-            f"tmux send-keys -t {t} -l -- /exit; sleep 0.3; "
-            f"tmux send-keys -t {t} Enter; sleep 0.4; "
-            f"tmux send-keys -t {t} Enter"
-        )
+        # 20s pre-sleep: longer than the previous 2.5s graceful path
+        # because this is now a hard kill — give the caller's Bash
+        # tool time to return, claude time to emit final assistant
+        # text, and the Stop hook time to complete its work before
+        # the session is destroyed.
+        kill_sh = f"sleep 20; tmux kill-session -t {t}"
         subprocess.Popen(  # noqa: S603 — fixed argv, no shell=True
-            ["bash", "-c", keystrokes_sh],
+            ["bash", "-c", kill_sh],
             stdin=subprocess.DEVNULL,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
@@ -179,13 +165,13 @@ def main(argv: list[str] | None = None) -> int:
         try:
             log_event(
                 "agent.exit_self",
-                f"{caller} queued /exit for own session {target}",
+                f"{caller} queued kill-session for own session {target}",
                 agent=caller,
                 meta={"session": target},
             )
         except Exception:
             pass
-        print(f"queued /exit for {target} ({caller}) in 2.5s")
+        print(f"queued kill-session for {target} ({caller}) in 20s")
         return 0
 
     print(f"unknown subcommand: {cmd}", file=sys.stderr)

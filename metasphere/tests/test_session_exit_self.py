@@ -1,16 +1,16 @@
 """Tests for ``metasphere session exit-self``.
 
-Phase H: exit-self schedules ``/exit`` for the caller's own tmux pane.
-Replaces the deferred-command marker path, which couldn't fire on
-empty REPL panes (cron-fired single-shot sessions emit no Stop hook).
+exit-self schedules ``tmux kill-session -t <target>`` for the
+caller's own session via a detached background process. The 3-day
+soak of the prior keystroke-injection path (C-c x2 + /exit + Enter)
+showed 0/10 successes — claude panes mid-turn ignored or buffered
+the injected keys, and every fire fell through to the 30-min
+ephemeral reaper. Replaced with a hard session kill.
 
-The kill sequence (C-c x2 + C-u + ``/exit`` literal + Enter x2) runs
-inside a detached background process spawned via ``subprocess.Popen``
-with ``start_new_session=True``. Running it inline would be fatal:
-``tmux send-keys C-c`` against the caller's own pane delivers SIGINT
-to claude, which propagates to its currently-running Bash tool — i.e.
-this metasphere CLI process — killing it before ``/exit`` can be
-delivered. Detaching survives the parent's death.
+Detaching via ``subprocess.Popen(start_new_session=True)`` is still
+load-bearing: the kill targets the caller's own session, which
+contains this CLI process; an inline ``tmux kill-session`` would
+terminate ourselves before we could log the event or return.
 """
 
 from __future__ import annotations
@@ -36,9 +36,10 @@ def _agent_record(name: str, project: str = ""):
 
 def test_exit_self_schedules_kill_via_detached_subprocess(monkeypatch):
     """Happy path: agent set, session alive → a detached Popen fires
-    the C-c x2 + /exit + Enter x2 sequence. The main process MUST NOT
-    call ``_tmux`` directly — that would self-interrupt this CLI
-    process before /exit could land in the caller's pane.
+    ``tmux kill-session -t <target>`` after a pre-sleep. The main
+    process MUST NOT run the kill inline — that would destroy the
+    session this CLI process is running in before we could return or
+    log the event.
     """
     monkeypatch.setenv("METASPHERE_AGENT_ID", "@worker-cron-1")
 
@@ -57,8 +58,8 @@ def test_exit_self_schedules_kill_via_detached_subprocess(monkeypatch):
         "metasphere.cli.session._tmux",
         side_effect=AssertionError(
             "exit-self must NOT call _tmux from the main process — that "
-            "would self-interrupt the caller's Bash tool. Use a "
-            "detached subprocess instead."
+            "would destroy the caller's own session before this CLI "
+            "process could return. Use a detached subprocess instead."
         ),
     ), patch(
         "metasphere.cli.session.subprocess.Popen", _FakePopen
@@ -71,26 +72,29 @@ def test_exit_self_schedules_kill_via_detached_subprocess(monkeypatch):
 
     # Detached: must use start_new_session so the child survives parent death.
     assert call["kwargs"].get("start_new_session") is True, (
-        "Popen must set start_new_session=True so the kill sequence "
-        f"survives the parent metasphere CLI exiting. kwargs={call['kwargs']}"
+        "Popen must set start_new_session=True so the kill survives "
+        f"the parent metasphere CLI exiting. kwargs={call['kwargs']}"
     )
 
     # Argv shape: ["bash", "-c", "<script>"]
     assert call["args"][:2] == ["bash", "-c"]
     script = call["args"][2]
 
-    # The script must target the resolved session name and include the
-    # full restart_agent_session-style sequence.
-    assert "metasphere-worker-cron-1" in script
-    assert "C-c" in script
-    assert "C-u" in script
-    assert "/exit" in script
-    assert "Enter" in script
-    # /exit must be sent with -l -- so flags inside the payload aren't
-    # parsed by tmux.
-    assert "-l -- /exit" in script
-    # Pre-sleep delays the kill so the caller's Bash tool can return.
+    # The script must schedule a hard ``tmux kill-session`` on the
+    # resolved session name — no keystroke injection.
+    assert "tmux kill-session -t metasphere-worker-cron-1" in script, (
+        f"script must contain a kill-session targeting the resolved "
+        f"session; got script={script!r}"
+    )
+    # Pre-sleep delays the kill so the caller's Bash tool / Stop hook
+    # can return before the session is destroyed.
     assert "sleep" in script
+    # Belt-and-braces: the previous keystroke-injection path must be
+    # gone. 3-day soak showed it 0/10 effective.
+    assert "send-keys" not in script, (
+        "exit-self must not fall back to tmux send-keys keystroke "
+        f"injection; got script={script!r}"
+    )
 
 
 def test_exit_self_no_agent_env_returns_1(monkeypatch, capsys):
@@ -227,13 +231,13 @@ def test_exit_self_resolves_project_scoped_agent(monkeypatch):
     assert rc == 0
     assert popen_calls, "expected one detached Popen for the kill"
     script = popen_calls[0]["args"][2]
-    expected = "metasphere-research-accelerator-programs"
+    expected = "tmux kill-session -t metasphere-research-accelerator-programs"
     assert expected in script, (
         f"detached kill script must target project-scoped session "
         f"{expected!r}; got script={script!r}"
     )
-    # Verify the bare (un-prefixed) session name is NOT what we send to.
-    bare_pattern = "tmux send-keys -t metasphere-accelerator-programs "
+    # Verify the bare (un-prefixed) session name is NOT what we kill.
+    bare_pattern = "tmux kill-session -t metasphere-accelerator-programs"
     assert bare_pattern not in script, (
         "detached kill script must not target the bare session name "
         "(regression: 04-28 project-scope resolver bug)"
