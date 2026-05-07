@@ -25,9 +25,12 @@ the line — history is signal). Newest at top of each section.
 - [x] **Fractal spawning auto-exec missing** — `metasphere-spawn` now launches child detached via `nohup claude -p ... --dangerously-skip-permissions`, writes `pid` and `output.log` in agent dir, opt-out via `METASPHERE_SPAWN_NO_EXEC=1`. (Fixed in this session.)
       Related task: `fractal-spawning-any-agent-can-spawn-sub-agents-20260406`
 
-- [ ] **Persistent agent idle GC** — `metasphere-wake` correctly reuses an existing tmux session if already alive (re-injects the task), but there is no upper bound on how long an idle session lives. A persistent agent that just finished a quick task sits idle until its next cron fire; if its next fire is hours away, it consumes a tmux pane + claude process the entire time doing nothing. Need an idle timer (e.g. close session after N hours of no activity).
-      Where: `scripts/metasphere-wake` + a periodic GC sweep
-      Decision needed: should agents keep their session warm (better context, faster fires) or cold-start every time (cheaper, no GC needed)?
+- [x] **Persistent agent idle GC** — three layers landed:
+      `agents.py` cold-starts on next wake when idle > `METASPHERE_STALE_SESSION_THRESHOLD_SEC` (default 7200s/2h);
+      gateway daemon reaps fully-dormant sessions at `dormancy_max_idle_seconds` (default 86400s/24h);
+      ephemerals reaped at `ephemeral_idle_max_seconds` (default 1800s/30min).
+      Decision-as-shipped: warm session for ≤2h, cold-start beyond that, hard-reap at 24h.
+      Verified live: @explorer kill at idle=14429s on 2026-05-07T12:00:59Z.
 
 - [ ] **Spawned child in `-p` mode doesn't engage tools** — child process runs and exits cleanly but only prints "Done." with no tool calls. The harness markdown as the entire `-p` prompt is too descriptive / not action-imperative enough. Headless claude treats it as a doc, not a task.
       Where: `scripts/metasphere-spawn` harness template + invocation strategy
