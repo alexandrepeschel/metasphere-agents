@@ -203,7 +203,7 @@ def invoke_agent_heartbeat(
         # rotate credentials while the orchestrator is still idle.
         try:
             from .cli.failsafe import probe_and_rotate
-            probe_and_rotate(session, paths)
+            probe_and_rotate(session, paths, agent=agent)
         except Exception:
             pass
 

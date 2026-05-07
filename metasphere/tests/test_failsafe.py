@@ -218,6 +218,68 @@ class TestProbeAndRotate:
             result = probe_and_rotate("fake-session", self._paths_stub())
         assert result is False
 
+    def test_rotate_log_attributes_detecting_agent(self, tmp_path):
+        """When triggered by a non-orchestrator pane, the rotate event
+        must record the detecting agent so we can trace which agent's
+        pane caught the signal — not always '@orchestrator'."""
+        accts = _make_profiles(tmp_path, ["primary", "spare"])
+        live = _make_live_symlink(tmp_path, accts, "primary")
+
+        pane_with_limit = "rate_limit_error: quota exceeded"
+
+        import metasphere.cli.failsafe as fs
+        with (
+            patch("metasphere.cli.failsafe._capture_pane", return_value=pane_with_limit),
+            patch("metasphere.cli.accounts.ACCOUNTS_DIR", accts),
+            patch("metasphere.cli.accounts.LIVE_CRED", live),
+            patch("metasphere.events.log_event") as mock_log,
+            patch("metasphere.posthook._resolve_chat_id", return_value=None),
+        ):
+            fs._last_rotation_ts = float("-inf")
+            result = probe_and_rotate(
+                "fake-session", self._paths_stub(), agent="@worldwire-eng"
+            )
+
+        assert result is True
+        assert mock_log.called
+        # Find the rotate event — log_event may have been called multiple
+        # times across the path; we want the failsafe.rotate one.
+        rotate_calls = [
+            c for c in mock_log.call_args_list
+            if c.args and c.args[0] == "failsafe.rotate"
+        ]
+        assert len(rotate_calls) == 1
+        assert rotate_calls[0].kwargs["agent"] == "@worldwire-eng"
+        assert "@worldwire-eng" in rotate_calls[0].args[1]
+
+    def test_skip_unmanaged_log_attributes_detecting_agent(self, tmp_path):
+        """skip_unmanaged event also names the detecting agent."""
+        accts = _make_profiles(tmp_path, ["primary", "spare"])
+        live = tmp_path / "live_cred.json"
+        live.write_text('{"token": "real"}')
+
+        pane_with_limit = "rate_limit_error"
+
+        import metasphere.cli.failsafe as fs
+        with (
+            patch("metasphere.cli.failsafe._capture_pane", return_value=pane_with_limit),
+            patch("metasphere.cli.accounts.ACCOUNTS_DIR", accts),
+            patch("metasphere.cli.accounts.LIVE_CRED", live),
+            patch("metasphere.events.log_event") as mock_log,
+        ):
+            fs._last_rotation_ts = float("-inf")
+            result = probe_and_rotate(
+                "fake-session", self._paths_stub(), agent="@worldwire-eng"
+            )
+
+        assert result is False
+        skip_calls = [
+            c for c in mock_log.call_args_list
+            if c.args and c.args[0] == "failsafe.skip_unmanaged"
+        ]
+        assert len(skip_calls) == 1
+        assert skip_calls[0].kwargs["agent"] == "@worldwire-eng"
+
     def test_skipped_when_live_cred_is_unmanaged_file(self, tmp_path):
         """If LIVE_CRED is a regular file (not a symlink), rotation
         would clobber the original credentials without backup.  The

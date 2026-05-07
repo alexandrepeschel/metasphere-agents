@@ -7,9 +7,11 @@ elapsed, rotates to the next available credential profile via the
 
 Public API
 ----------
-``probe_and_rotate(session, paths) -> bool``
+``probe_and_rotate(session, paths, agent="@orchestrator") -> bool``
     Call this just before injecting a heartbeat.  Returns True if a
-    rotation was performed.
+    rotation was performed.  ``agent`` is the agent whose pane is
+    being probed; used only for log/notify attribution since the
+    rotation itself is global (rate-limit hits the shared account).
 """
 
 from __future__ import annotations
@@ -164,12 +166,19 @@ def _do_rotate(next_name: str, accounts_dir: Path, live_cred: Path) -> bool:
 def probe_and_rotate(
     session: str,
     paths,  # metasphere.paths.Paths — typed loosely to avoid circular import
+    agent: str = "@orchestrator",
 ) -> bool:
     """Probe *session* for a rate-limit signal; rotate credentials if found.
 
     Returns True if a rotation was performed, False otherwise.  Never
     raises — failures are logged and swallowed so the caller (heartbeat)
     stays alive.
+
+    ``agent`` attributes the detection to whichever agent's pane caught
+    the signal.  The rotation itself is global — a rate-limit anywhere
+    in the harness implies the shared Anthropic account is throttled —
+    but the log and telegram notification name the detecting agent so
+    it's clear where the signal originated.
 
     Skipped when:
     - ``sys.platform == "darwin"`` (credentials live in keychain there).
@@ -201,10 +210,10 @@ def probe_and_rotate(
                 from ..events import log_event
                 log_event(
                     "failsafe.skip_unmanaged",
-                    f"rate-limit detected but {LIVE_CRED} is not a "
-                    f"metasphere-managed symlink; skipping rotation to "
-                    f"avoid clobbering original credentials",
-                    agent="@orchestrator",
+                    f"rate-limit detected on {agent} pane but {LIVE_CRED} "
+                    f"is not a metasphere-managed symlink; skipping "
+                    f"rotation to avoid clobbering original credentials",
+                    agent=agent,
                     paths=paths,
                 )
             except Exception:
@@ -225,8 +234,8 @@ def probe_and_rotate(
             from ..events import log_event
             log_event(
                 "failsafe.rotate",
-                f"rate-limit detected in pane; rotated to {next_name}",
-                agent="@orchestrator",
+                f"rate-limit detected on {agent} pane; rotated to {next_name}",
+                agent=agent,
                 paths=paths,
             )
         except Exception:
@@ -239,7 +248,8 @@ def probe_and_rotate(
             if chat_id:
                 telegram_api.send_message(
                     chat_id,
-                    f"Rate limit detected — rotated to credentials profile '{next_name}'.",
+                    f"Rate limit detected on {agent} pane — rotated to "
+                    f"credentials profile '{next_name}'.",
                 )
         except Exception:
             pass
