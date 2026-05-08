@@ -75,6 +75,12 @@ the line — history is signal). Newest at top of each section.
 
 ## Test Coverage Gaps (CLI e2e)
 
+**Superseded (2026-05-08)** — this checklist tracked end-to-end coverage of
+pre-Python-rewrite bash scripts. The Python CLI surface (`metasphere/cli/*.py`)
+has unit-test coverage in `metasphere/tests/test_cli_*.py`; the bash scripts
+listed below are either retired or now thin shims that delegate to Python.
+Lines preserved as historical record; do not interpret as open work.
+
 Each script needs an end-to-end pass. Mark `[x]` when verified, `[!]` when broken.
 
 - [ ] `messages` (send/reply/done/read/tree/status)
