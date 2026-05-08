@@ -882,6 +882,26 @@ def classify_message(
             and not _is_no_reader(msg.to, paths)
         ):
             return MSG_VERDICT_DONE_PENDING_ARCHIVE
+        # Self-sent !done (sender == recipient) auto-archives ahead of
+        # the info window. `msg done` on any message generates a !done
+        # notification back to the sender; when sender == recipient
+        # (e.g. @orchestrator marking its own outbound msg done) the
+        # resulting !done loops the consolidator forever — each tick
+        # ages it into UNREAD-OLD/STALE → ping → !query escalation,
+        # which itself triggers another `msg done`.
+        if from_norm and to_norm and from_norm == to_norm:
+            return MSG_VERDICT_INFO_AUTO_ARCHIVE
+        # !done addressed to a no-reader (system agent like @consolidate
+        # or GC'd ephemeral) auto-archives immediately — nobody can act
+        # on it, and pinging just spawns more no-reader messages.
+        if _is_no_reader(msg.to, paths):
+            return MSG_VERDICT_INFO_AUTO_ARCHIVE
+        # All other !done messages: hold ACTIVE until they age into
+        # DONE via the info_window check above. Falling through to the
+        # UNREAD-OLD / STALE branches turned thread-closer !dones into
+        # ping ladders — !done is a notification, not a request for
+        # reply, so it should never enter the ping cycle.
+        return MSG_VERDICT_ACTIVE
 
     # UNREAD-OLD: status still unread after the stale window. Rare after
     # auto-mark-read on view, but catches messages on agents that

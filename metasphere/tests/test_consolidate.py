@@ -1073,11 +1073,13 @@ def test_msg_classify_orchestrator_done_aged_takes_precedence(tmp_paths):
     assert _con.classify_message(msg) == _con.MSG_VERDICT_DONE
 
 
-def test_msg_classify_orchestrator_done_to_orchestrator_is_not_short_circuited(tmp_paths):
-    """Orchestrator-to-orchestrator !done (self-loop) does NOT take the
-    fast-path — the classifier falls through to the existing
-    age-based DONE branch / ACTIVE state. Self-acks are unusual but
-    the rule only fires for cross-agent thread-closers."""
+def test_msg_classify_orchestrator_done_to_orchestrator_auto_archives(tmp_paths):
+    """Orchestrator-to-orchestrator !done (self-loop) auto-archives
+    ahead of the info window. `msg done` on a self-sent message
+    generates a !done notification back to the sender; without this
+    short-circuit the resulting self-send !done loops the consolidator
+    forever — each tick ages it into UNREAD-OLD/STALE → ping →
+    !query escalation, which itself triggers another `msg done`."""
     msg = _msgs.send_message(
         "@orchestrator", "!done", "self-ack",
         "@orchestrator", paths=tmp_paths, wake=False,
@@ -1087,9 +1089,27 @@ def test_msg_classify_orchestrator_done_to_orchestrator_is_not_short_circuited(t
     msg.path.write_text(text)
     msg = _msgs.read_message(msg.path)
 
-    # Fresh: ACTIVE (the old aged-DONE branch needs the read_at to be
-    # info_window-old; on a fresh message it falls through).
-    assert _con.classify_message(msg) == _con.MSG_VERDICT_ACTIVE
+    assert _con.classify_message(msg) == _con.MSG_VERDICT_INFO_AUTO_ARCHIVE
+
+
+def test_msg_classify_done_unread_aged_does_not_become_unread_old(tmp_paths):
+    """!done notifications must never enter the UNREAD-OLD ping ladder.
+
+    Repro: a self-send !done sits unread, ages past stale_window=15m
+    but before info_window=60m. Pre-fix it would classify as
+    UNREAD_OLD on the next tick (then STALE on subsequent ticks),
+    pinging the recipient forever. Post-fix the !done block holds
+    ACTIVE/INFO_AUTO_ARCHIVE depending on sender == recipient.
+    """
+    # Cross-agent !done aged 30min unread: ACTIVE (will reach DONE at
+    # info_window=60min). Importantly, NOT UNREAD_OLD or STALE.
+    msg = _msgs.send_message(
+        "@worker", "!done", "ack", "@orchestrator",
+        paths=tmp_paths, wake=False,
+    )
+    msg = _age_msg(msg, created_min_ago=30)
+    verdict = _con.classify_message(msg, paths=tmp_paths)
+    assert verdict not in (_con.MSG_VERDICT_UNREAD_OLD, _con.MSG_VERDICT_STALE)
 
 
 def test_msg_apply_done_pending_archive_moves_file(repo, tmp_paths):
