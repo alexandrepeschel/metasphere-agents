@@ -69,7 +69,8 @@ the line — history is signal). Newest at top of each section.
 - [ ] **Agent tree doesn't look like a tree** — `metasphere agents` flat list, no hierarchy.
       Related task: `make-agent-tree-actually-look-like-a-tree-20260406`
 
-- [ ] **Stale agents in registry** — `~/.metasphere/agents/` contains agents from old sessions (`@coding-integration`, `@coding-simple`, `@main`, `@night`, `@research-gather`, `@research-synthesize`, `@smoke-test`) with no GC.
+- [x] **Stale agents in registry** — `~/.metasphere/agents/` contains agents from old sessions (`@coding-integration`, `@coding-simple`, `@main`, `@night`, `@research-gather`, `@research-synthesize`, `@smoke-test`) with no GC.
+      Resolved (@explorer 2026-05-08): all 7 named agents are gone from the registry. Ephemeral GC now ships in `metasphere/consolidate.py::_gc_ephemeral_agents` — agents without `MISSION.md`/`persona-index.md` are reaped once their tmux+pid go cold; persistent personas are exempt by design.
 
 ---
 
