@@ -92,6 +92,15 @@ def test_hooks_unknown_subcommand_exits_2(capsys):
     assert "unknown sub-event" in err
 
 
+def test_agent_unknown_subcommand_exits_2_with_full_usage(capsys):
+    rc, _, err = _run(["agent", "spaw"], capsys)
+    assert rc == 2
+    assert "unknown subcommand 'spaw'" in err
+    # Full USAGE is emitted (not the old truncated single-line form):
+    assert "metasphere agent {list|status|spawn|wake|seed|specs}" in err
+    assert "Spawn an ephemeral one-shot agent" in err
+
+
 def test_telegram_groups_routes_to_groups_module(monkeypatch, capsys):
     called = {}
 

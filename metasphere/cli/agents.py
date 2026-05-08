@@ -506,8 +506,9 @@ def main(argv: list[str] | None = None) -> int:
         return _seed(argv[1:])
     if argv[0] == "specs":
         return _list_specs()
-    print("Usage: agents [list|status|spawn|wake|seed|specs]", file=sys.stderr)
-    return 1
+    print(f"metasphere agent: unknown subcommand {argv[0]!r}", file=sys.stderr)
+    sys.stderr.write(USAGE)
+    return 2
 
 
 if __name__ == "__main__":
