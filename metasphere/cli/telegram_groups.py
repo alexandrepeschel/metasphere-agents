@@ -1,24 +1,31 @@
-"""CLI: ``python -m metasphere.cli.telegram_groups``.
-
-    telegram-groups setup [--forum-id <id>] [--force]
-    telegram-groups verify [--forum-id <id>]
-    telegram-groups create <name>
-    telegram-groups list
-    telegram-groups send <topic> <text>
-    telegram-groups link <topic>
-
-NOTE on the Telegram bot limitation:
-    Telegram bots CANNOT create supergroups or enable Topics — that step
-    is reserved for a human user. A bot CAN create individual topics
-    inside an already-existing forum supergroup via createForumTopic.
-    The ``setup`` command therefore registers an *existing* forum group
-    that you (a human) created, enabled Topics on, and added the bot to
-    as an admin with the 'Manage Topics' permission. After that one-time
-    human step, ``project topic create`` and friends are fully
-    automatable.
-"""
+"""CLI for Telegram forum-group + topic management."""
 
 from __future__ import annotations
+
+
+DESCRIPTION = "Manage the Telegram forum supergroup + per-topic threads."
+
+USAGE = """\
+Usage: metasphere telegram groups <command> [args...]
+
+Commands:
+  setup [--forum-id <id>] [--force]
+                          Register an existing forum supergroup the
+                          bot is already an admin of. --forum-id sets
+                          the id non-interactively; --force overwrites.
+  verify [--forum-id <id>]
+                          Check forum metadata + bot admin status.
+  create <name>           Create a new topic in the registered forum.
+  list                    List existing topics (id + name).
+  send <topic> <text>     Post <text> into <topic>.
+  link <topic>            Print the canonical URL for <topic>.
+
+Telegram bots cannot create supergroups or enable Topics — that
+step is reserved for a human user. The bot CAN create individual
+topics inside a forum supergroup via createForumTopic, so `setup`
+registers an existing supergroup the bot has been added to as an
+admin with 'Manage Topics' permission.
+"""
 
 import os
 import sys
@@ -37,8 +44,11 @@ from metasphere.telegram.groups import (
 
 def main(argv: list[str] | None = None) -> int:
     args = list(argv if argv is not None else sys.argv[1:])
+    if args and args[0] in ("--help", "-h"):
+        sys.stdout.write(USAGE)
+        return 0
     if not args:
-        print(__doc__, file=sys.stderr)
+        sys.stderr.write(USAGE)
         return 2
     cmd, *rest = args
     paths = resolve()

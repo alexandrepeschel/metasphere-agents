@@ -1,23 +1,32 @@
-"""Stop-hook entry point: ``python -m metasphere.cli.posthook``.
-
-Usage::
-
-    python -m metasphere.cli.posthook              # normal Stop-hook mode
-    python -m metasphere.cli.posthook --dry-run    # parse stdin, print
-                                                   # JSON plan, no send
-    python -m metasphere.cli.posthook --help
+"""Stop-hook entry point.
 
 Reads the claude-code Stop-hook JSON payload from stdin, runs the
 posthook pipeline, and exits 0 unconditionally — the Stop hook must
 never break the host.
-
-In ``--dry-run`` mode the payload is parsed as usual but no telegram
-send or state-file write occurs; instead a JSON summary is printed to
-stdout with ``chat_id``, ``text_length``, ``chunk_count``, and
-``would_send``. This is the contract e2e rigs depend on.
 """
 
 from __future__ import annotations
+
+
+DESCRIPTION = "Stop-hook: forward the assistant's last turn to Telegram."
+
+USAGE = """\
+Usage: metasphere hooks posthook [--dry-run]
+
+Stop-hook entrypoint. Wired into Claude Code via
+~/.metasphere/.claude/settings.local.json. Reads the Stop-hook JSON
+payload from stdin, applies the posthook pipeline (silent-tick
+filter, identifier scrub, chunking, send), and exits 0 unconditionally
+— the Stop hook must never break the host process.
+
+Options:
+  --dry-run         Parse stdin and print a JSON plan to stdout (chat
+                    id, text length, chunk count, would_send). No
+                    telegram send, no state-file write. This is the
+                    contract e2e rigs depend on.
+
+Always exits 0.
+"""
 
 import argparse
 import json
@@ -73,13 +82,7 @@ def _dry_run(stdin_bytes: bytes) -> int:
 def main(argv: list[str] | None = None) -> int:
     args = list(argv if argv is not None else sys.argv[1:])
     if args and args[0] in ("--help", "-h"):
-        parser = argparse.ArgumentParser(
-            prog="metasphere.cli.posthook",
-            description="Claude-code Stop-hook entry point.",
-        )
-        parser.add_argument("--dry-run", action="store_true",
-                            help="parse stdin and print a JSON plan; no sends, no writes")
-        parser.print_help()
+        sys.stdout.write(USAGE)
         return 0
     try:
         stdin_bytes = sys.stdin.buffer.read() if not sys.stdin.isatty() else b""

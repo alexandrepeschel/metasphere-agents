@@ -1,16 +1,27 @@
-"""CLI shim for the task management module.
-
-Usage:
-    python -m metasphere.cli.tasks                       # list active
-    python -m metasphere.cli.tasks list [all|completed]
-    python -m metasphere.cli.tasks new "title" [!priority]
-    python -m metasphere.cli.tasks start <task-id>
-    python -m metasphere.cli.tasks update <task-id> "note"
-    python -m metasphere.cli.tasks done <task-id> "summary"
-    python -m metasphere.cli.tasks show <task-id>
-"""
+"""CLI shim for the task management module."""
 
 from __future__ import annotations
+
+DESCRIPTION = "Create, list, update, and complete metasphere tasks."
+
+USAGE = """\
+Usage: metasphere task [<command> [args...]]
+
+With no arguments, lists active tasks for the current scope. Commands:
+
+  metasphere task list [all|completed]    Filter by status.
+  metasphere task new "title" [!priority] Create a new task.
+  metasphere task start <task-id>         Mark a task in-progress.
+  metasphere task update <task-id> "note" Append a progress note.
+  metasphere task done <task-id> "summary"
+                                          Mark a task complete.
+  metasphere task show <task-id>          Print one task in full.
+
+Priorities: `!urgent`, `!high`, `!normal` (default), `!low`.
+Tasks are stored under `.tasks/active/` at the current scope and
+move to `.tasks/completed/` on `done`.
+"""
+
 
 import os
 import sys
@@ -434,7 +445,7 @@ def _cmd_show(args: list[str]) -> int:
 def main(argv: list[str] | None = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
     if argv and argv[0] in ("--help", "-h"):
-        print(__doc__ or "")
+        sys.stdout.write(USAGE)
         return 0
     if not argv or argv[0] == "list":
         return _cmd_list(argv[1:] if argv else [])

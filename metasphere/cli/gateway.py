@@ -1,15 +1,25 @@
-"""``gateway`` CLI entry point.
-
-Subcommands::
-
-    python -m metasphere.cli.gateway daemon [N]    # run gateway daemon
-    python -m metasphere.cli.gateway inject "msg"  # inject directly into session
-    python -m metasphere.cli.gateway ensure        # start session if needed
-    python -m metasphere.cli.gateway status        # session status
-    python -m metasphere.cli.gateway restart       # restart claude in session
-"""
+"""Gateway CLI entry point."""
 
 from __future__ import annotations
+
+DESCRIPTION = "Gateway daemon control + Telegram injection helpers."
+
+USAGE = """\
+Usage: metasphere gateway <command> [args...]
+
+Commands:
+  daemon [<interval>]    Run the gateway daemon (Telegram poll +
+                         orchestrator REPL watchdog). <interval>
+                         is the poll interval in seconds (default 3).
+  inject "msg"           Inject <msg> directly into the orchestrator's
+                         tmux session (bypasses Telegram).
+  ensure                 Start the orchestrator session if it is not
+                         already alive.
+  status                 Print orchestrator session liveness + idle.
+  restart                Restart Claude inside the orchestrator
+                         session (preserves the tmux pane).
+"""
+
 
 import argparse
 import sys
@@ -94,8 +104,12 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: Optional[List[str]] = None) -> int:
+    args_list = list(sys.argv[1:] if argv is None else argv)
+    if args_list and args_list[0] in ("--help", "-h"):
+        sys.stdout.write(USAGE)
+        return 0
     parser = build_parser()
-    args = parser.parse_args(argv)
+    args = parser.parse_args(args_list)
     return args.func(args)
 
 

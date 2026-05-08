@@ -1,15 +1,5 @@
 """``metasphere update`` CLI dispatcher.
 
-Subcommand surface::
-
-    metasphere update                    # one-shot run (chatty)
-    metasphere update --quiet            # one-shot, log only
-    metasphere update --enable           # turn auto-update on + register cron job
-    metasphere update --disable          # turn auto-update off + unregister job
-    metasphere update --status           # print current config + last result
-    metasphere update --register-job     # install/refresh cron job from current config
-    metasphere update --templates        # interactive opt-in for drifted shipped templates
-
 The actual update flow lives in :mod:`metasphere.update`. This module is
 just an argv parser.
 """
@@ -22,7 +12,25 @@ from metasphere import paths as _paths
 from metasphere import update as _update
 
 
-_HELP = __doc__ or ""
+DESCRIPTION = "Run the metasphere self-update flow (or manage its cron job)."
+
+USAGE = """\
+Usage: metasphere update [<command>] [options]
+
+With no arguments: run a one-shot update (chatty progress on stdout).
+
+Commands / options:
+  --quiet              Run, but log only (no progress on stdout).
+  --enable             Turn auto-update on and register the cron job.
+  --disable            Turn auto-update off and unregister the job.
+  --status             Print current config + last update result.
+  --register-job       Install / refresh the cron job from current config.
+  --templates          Interactive opt-in for drifted shipped templates.
+
+The update reads from `pyproject.toml` and the configured remote
+(`pip install --upgrade metasphere` by default). See
+~/.metasphere/state/last-update.json for prior runs.
+"""
 
 
 def _enable() -> int:
@@ -70,7 +78,7 @@ def _templates() -> int:
 def main(argv: list[str] | None = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
     if argv and argv[0] in ("-h", "--help"):
-        sys.stdout.write(_HELP)
+        sys.stdout.write(USAGE)
         return 0
 
     quiet = False
@@ -98,7 +106,7 @@ def main(argv: list[str] | None = None) -> int:
         return _run(quiet=quiet)
 
     sys.stderr.write(f"metasphere update: unknown option: {head}\n\n")
-    sys.stderr.write(_HELP)
+    sys.stderr.write(USAGE)
     return 2
 
 

@@ -1,15 +1,27 @@
-"""CLI: ``metasphere session``.
-
-    session list
-    session info <@agent>
-    session attach <@agent>
-    session stop <@agent>
-    session restart <@agent> [reason]
-    session send <@agent> <message>
-    session exit-self
-"""
+"""CLI for tmux session management."""
 
 from __future__ import annotations
+
+DESCRIPTION = "Inspect, attach, and control per-agent tmux sessions."
+
+USAGE = """\
+Usage: metasphere session <command> [args...]
+
+Commands:
+  list                            List all live and dormant sessions.
+  info <@agent>                   Show session metadata + last activity.
+  attach <@agent>                 Attach the current terminal to the
+                                  agent's session.
+  stop <@agent>                   Kill the agent's session.
+  restart <@agent> [reason]       Restart the agent's session (kills +
+                                  re-creates).
+  send <@agent> <message>         Inject <message> into the agent's
+                                  Claude REPL.
+  exit-self                       Cleanly exit the current agent's
+                                  Claude REPL (used as a scheduled-job
+                                  payload tail to free its idle slot).
+"""
+
 
 import os
 import shlex
@@ -33,10 +45,10 @@ from metasphere.session import (
 def main(argv: list[str] | None = None) -> int:
     args = list(argv if argv is not None else sys.argv[1:])
     if args and args[0] in ("--help", "-h"):
-        print(__doc__ or "")
+        sys.stdout.write(USAGE)
         return 0
     if not args:
-        print(__doc__, file=sys.stderr)
+        sys.stderr.write(USAGE)
         return 2
     cmd, *rest = args
 

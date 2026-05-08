@@ -1,21 +1,30 @@
-"""CLI shim for the messaging module.
-
-Usage::
-
-    python -m metasphere.cli.messages                          # unread inbox
-    python -m metasphere.cli.messages all                      # all messages
-    python -m metasphere.cli.messages send @target !label "msg"
-    python -m metasphere.cli.messages reply <id> "response"
-    python -m metasphere.cli.messages done <id> "note"
-    python -m metasphere.cli.messages read <id>
-    python -m metasphere.cli.messages tree
-    python -m metasphere.cli.messages status [id]
-"""
+"""CLI shim for the messaging module."""
 
 from __future__ import annotations
 
 import sys
 from pathlib import Path
+
+
+DESCRIPTION = "Send, list, reply to, and resolve cross-agent messages."
+
+USAGE = """\
+Usage: metasphere msg [<command> [args...]]
+
+With no arguments, prints unread inbox for the current scope. Commands:
+
+  metasphere msg all                          List read + unread messages.
+  metasphere msg send @target !label "msg"    Send a message.
+  metasphere msg reply <id> "response"        Reply to <id>.
+  metasphere msg done <id> "note"             Mark <id> resolved.
+  metasphere msg read <id>                    Pretty-print one message.
+  metasphere msg tree                         Render the reply graph.
+  metasphere msg status [id]                  Show status of one message.
+
+Identifiers `@target` resolve to agents (`@<name>`), users
+(`@<handle>`), or projects (`@<project>`). Labels are bang-prefixed
+(`!task`, `!info`, `!query`, `!done`, `!reply`, `!urgent`).
+"""
 
 from metasphere import messages as _msgs
 from metasphere import paths as _paths
@@ -182,7 +191,7 @@ def _cmd_status(args: list[str]) -> int:
 def main(argv: list[str] | None = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
     if argv and argv[0] in ("--help", "-h"):
-        print(__doc__ or "")
+        sys.stdout.write(USAGE)
         return 0
     if not argv:
         return _print_inbox(show_all=False)

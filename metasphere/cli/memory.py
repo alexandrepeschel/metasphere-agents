@@ -1,13 +1,26 @@
-"""CLI for the memory subpackage.
-
-Usage::
-
-    python -m metasphere.cli.memory search "query" [--limit N] [--strategy fts|cam|hybrid]
-    python -m metasphere.cli.memory context "query" [--budget N] [--strategy ...]
-    python -m metasphere.cli.memory strategies
-"""
+"""CLI for the memory subpackage."""
 
 from __future__ import annotations
+
+DESCRIPTION = "Search project memory + format memory hits as a context block."
+
+USAGE = """\
+Usage: metasphere memory <command> [args...]
+
+Commands:
+  search "query" [--limit N] [--strategy fts|cam|hybrid]
+                                Search memory and print top-N hits.
+  context "query" [--budget N] [--strategy ...]
+                                Format memory hits as a context block
+                                ready for prompt injection.
+  strategies                    List available retrieval strategies.
+
+Strategies:
+  fts                           Token overlap (default fallback).
+  cam                           Collective Agent Memory recall.
+  hybrid                        Both, scored together.
+"""
+
 
 import argparse
 import sys
@@ -35,6 +48,10 @@ def _strategy(name: str | None) -> list[MemoryStrategy] | None:
 
 
 def main(argv: list[str] | None = None) -> int:
+    args_list = list(sys.argv[1:] if argv is None else argv)
+    if args_list and args_list[0] in ("--help", "-h"):
+        sys.stdout.write(USAGE)
+        return 0
     p = argparse.ArgumentParser(prog="metasphere memory")
     sub = p.add_subparsers(dest="cmd", required=True)
 
@@ -50,7 +67,7 @@ def main(argv: list[str] | None = None) -> int:
 
     sub.add_parser("strategies", help="list available strategies")
 
-    args = p.parse_args(argv)
+    args = p.parse_args(args_list)
 
     if args.cmd == "strategies":
         for name in ("fts", "cam", "hybrid"):

@@ -1,38 +1,35 @@
 """``metasphere migrate-project-dirs`` — move project-scoped content to the
 canonical ``~/.metasphere/projects/<name>/`` layout.
 
-Per operator directive (2026-04-14:) the single canonical location for everything
-project-scoped is ``~/.metasphere/projects/<name>/``. In practice, two
-legacy patterns exist on disk:
+The single canonical location for everything project-scoped is
+``~/.metasphere/projects/<name>/``. Two legacy patterns exist on disk
+(tasks under <registered_repo>/.tasks/, project.json under
+<registered_repo>/.metasphere/) — this command migrates them.
 
-1. Tasks live at ``<registered_repo>/.tasks/`` instead of
-   ``~/.metasphere/projects/<name>/.tasks/``.
-2. ``project.json`` lives at ``<registered_repo>/.metasphere/project.json``
-   instead of ``~/.metasphere/projects/<name>/project.json`` (some
-   early-registered projects hit this when bootstrapped from a
-   pre-existing repo).
-
-PR #8 scope: migrate **tasks only** (`--what tasks`, the default).
-Messages, changelog, and learnings land in a follow-up PR that reuses
-the same ``--what {all,messages,changelog,learnings}`` flag surface.
-
-The migration is idempotent and refuses on conflict:
-
-- If the dest ``.tasks/`` doesn't exist yet → move the whole tree.
-- If the dest exists and is empty → remove dest, move tree.
-- If both src and dest have content → skip with a clear error line
-  and non-zero exit (operator must resolve manually).
-- ``--dry-run`` prints the plan without touching disk.
-
-Usage::
-
-    metasphere migrate-project-dirs                 # dry-run tasks for every registered project
-    metasphere migrate-project-dirs --apply
-    metasphere migrate-project-dirs --project foo --apply
-    metasphere migrate-project-dirs --what tasks --apply
+The migration is idempotent and refuses on conflict.
 """
 
 from __future__ import annotations
+
+DESCRIPTION = "Migrate project-scoped content to the canonical projects/ layout."
+
+USAGE = """\
+Usage: metasphere migrate-project-dirs [options]
+
+Move project-scoped content from each registered repo into the
+canonical ~/.metasphere/projects/<name>/ layout. Idempotent;
+conflicts skip the affected project with a clear error.
+
+Options:
+  --apply              Apply the move (default is dry-run).
+  --project <name>     Only operate on one project.
+  --what <kind>        What to migrate: tasks (default), messages,
+                       changelog, learnings, all.
+
+Conflict handling: if both src and dest have content, the project is
+skipped with a non-zero exit so the operator can resolve manually.
+"""
+
 
 import argparse
 import shutil
@@ -156,6 +153,10 @@ def _run_migration(
 
 
 def main(argv: List[str] | None = None) -> int:
+    args_list = list(sys.argv[1:] if argv is None else argv)
+    if args_list and args_list[0] in ("--help", "-h"):
+        sys.stdout.write(USAGE)
+        return 0
     parser = argparse.ArgumentParser(
         prog="metasphere migrate-project-dirs",
         description=(
@@ -175,7 +176,7 @@ def main(argv: List[str] | None = None) -> int:
         "--apply", action="store_true",
         help="actually perform the moves (default: dry-run)",
     )
-    args = parser.parse_args(argv)
+    args = parser.parse_args(args_list)
 
     paths = resolve()
     return _run_migration(

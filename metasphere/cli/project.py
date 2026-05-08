@@ -1,27 +1,44 @@
-"""CLI: ``metasphere project ...``.
-
-Subcommands::
-
-    project new <name> [--path P] [--goal "..."] [--repo URL] [--member @x:role[:persistent]] ...
-    project init [path]                       # legacy minimal constructor
-    project list
-    project show [name]
-    project member add <name> @agent [--role R] [--persistent]
-    project member remove <name> @agent
-    project member list [name]
-    project members [name]                    # alias for member list
-    project wake [name]
-    project for [path]                        # print enclosing project name
-    project chat <name> "message"             # send to project telegram topic
-    project rename <old-name> <new-name>  # rename project (dir + metadata)
-    project changelog [name]
-    project learnings [name]
-
-Every subcommand flows through this dispatcher; lazy-imports the heavy
-modules so help remains cheap.
-"""
+"""CLI for project lifecycle (create, list, members, chat)."""
 
 from __future__ import annotations
+
+DESCRIPTION = "Create, list, and manage projects + their member agents."
+
+USAGE = """\
+Usage: metasphere project <command> [args...]
+
+Commands:
+  new <name> [--path P] [--goal "..."] [--repo URL]
+      [--member @x:role[:persistent]] ...
+                                Create a new project with optional
+                                metadata and member agents.
+  init [path]                   Legacy minimal constructor: write
+                                project metadata into [path].
+  list                          List all registered projects.
+  show [name]                   Print metadata for one project.
+  rename <old-name> <new-name>  Rename a project (directory + metadata).
+
+Member subcommands:
+  member add <name> @agent [--role R] [--persistent]
+                                Add an agent to the project's member
+                                list.
+  member remove <name> @agent   Remove an agent.
+  member list [name]            List members.
+  members [name]                Alias for `member list`.
+
+Other:
+  wake [name]                   Wake every persistent member of the
+                                project.
+  for [path]                    Print the enclosing project name for a
+                                given path (or the current dir).
+  chat <name> "message"         Post a message to the project's
+                                Telegram topic.
+  changelog [name]              Show the project changelog.
+  learnings [name]              Show the project LEARNINGS file.
+
+Heavy modules are lazy-imported so `--help` stays cheap.
+"""
+
 
 import argparse
 import sys
@@ -370,10 +387,10 @@ _DISPATCH = {
 def main(argv: list[str] | None = None) -> int:
     args = list(argv if argv is not None else sys.argv[1:])
     if args and args[0] in ("--help", "-h"):
-        print(__doc__ or "")
+        sys.stdout.write(USAGE)
         return 0
     if not args:
-        print(__doc__, file=sys.stderr)
+        sys.stderr.write(USAGE)
         return 2
     cmd, *rest = args
     handler = _DISPATCH.get(cmd)

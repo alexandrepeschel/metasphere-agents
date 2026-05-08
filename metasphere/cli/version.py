@@ -62,17 +62,21 @@ def _resolve_version() -> str:
         return "0.0.0"
 
 
-_HELP = """\
+DESCRIPTION = "Print installed package version + current HEAD commit hash."
+
+USAGE = """\
 Usage: metasphere version
 
 Print the installed metasphere package version and current HEAD commit hash.
+
+Takes no arguments.
 """
 
 
 def main(argv: list[str] | None = None) -> int:
     args = list(sys.argv[1:] if argv is None else argv)
     if args and args[0] in ("--help", "-h"):
-        sys.stdout.write(_HELP)
+        sys.stdout.write(USAGE)
         return 0
     print(f"metasphere {_resolve_version()}")
     print(f"commit: {_head_hash()}")

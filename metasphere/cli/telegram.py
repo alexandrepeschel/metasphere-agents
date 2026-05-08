@@ -1,21 +1,37 @@
 """``telegram`` CLI entry point.
 
-Subcommands:
-    telegram send "msg"        Send a message to the saved chat id as
-                               the current ``METASPHERE_AGENT_ID``.
-    telegram send "@<name>" "msg"
-                               Send to a named contact from
-                               ``~/.metasphere/ADDRESSBOOK.yaml``.
-    telegram getme             Print bot info (sanity check).
-    telegram register-commands Publish slash-command manifest.
-    telegram send-document     Upload a file via sendDocument.
-
 Polling lives in the ``metasphere-gateway`` systemd service; there is
 no CLI poller. See ``metasphere.gateway.daemon`` and
 ``metasphere.telegram.poller.run_poll_iteration``.
 """
 
 from __future__ import annotations
+
+DESCRIPTION = "Send Telegram messages, upload documents, or run getMe."
+
+USAGE = """\
+Usage: metasphere telegram <command> [args...]
+
+Commands:
+  send "msg"                       Send a message to the saved chat id
+                                   as the current METASPHERE_AGENT_ID.
+  send "@<name>" "msg"             Send to a named contact from
+                                   ~/.metasphere/ADDRESSBOOK.yaml.
+  send "msg" --to <name>           Same, via flag form.
+  send "msg" --chat-id <id>        Send to a specific numeric chat id.
+  getme                            Print bot info (sanity check).
+  register-commands [-v]           Publish the slash-command manifest
+                                   via setMyCommands.
+  send-document <path> [--caption ...] [--filename ...] [--chat-id ...]
+                                   Upload a file to the chat via
+                                   sendDocument.
+  groups <subcommand> ...          See `metasphere telegram groups
+                                   --help` for thread/topic management.
+
+Polling lives in the metasphere-gateway systemd service; there is no
+CLI poller.
+"""
+
 
 import argparse
 import json
@@ -271,8 +287,15 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: Optional[List[str]] = None) -> int:
+    args_list = list(sys.argv[1:] if argv is None else argv)
+    if args_list and args_list[0] in ("--help", "-h"):
+        sys.stdout.write(USAGE)
+        return 0
+    if args_list and args_list[0] == "groups":
+        from metasphere.cli import telegram_groups
+        return telegram_groups.main(args_list[1:])
     parser = build_parser()
-    args = parser.parse_args(argv)
+    args = parser.parse_args(args_list)
     return args.func(args)
 
 

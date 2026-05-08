@@ -1,16 +1,35 @@
-"""CLI shims for the agent lifecycle module.
-
-Command surface::
-
-    metasphere agent spawn @name /scope/ "task" [@parent]
-    metasphere agent wake  @name ["first task"]
-    metasphere agent wake  --list | --status
-    metasphere agent contract @name
-    agents list
-    agents status
-"""
+"""CLI shims for the agent lifecycle module."""
 
 from __future__ import annotations
+
+DESCRIPTION = "Spawn, wake, list, and seed metasphere agents."
+
+USAGE = """\
+Usage: metasphere agent {list|status|spawn|wake|seed|specs} [args...]
+
+Commands:
+  list [project]    List persistent agents (optionally filtered by
+                    project).
+  status            Show liveness + idle for each persistent agent.
+  spawn @name /scope/ "task description" [@parent]
+                    [--authority "..."]
+                    [--responsibility "..."]
+                    [--accountability "..."]
+                    Spawn an ephemeral one-shot agent. Authority /
+                    Responsibility / Accountability fields are strongly
+                    recommended (treated as required in a future
+                    release).
+  wake @name ["first task"]
+                    Wake a dormant persistent agent (re-attaches its
+                    tmux session and injects an optional first task).
+  seed --spec <spec> @agent-id [--project <name>] [--force]
+                    Materialize the per-type templates from
+                    `templates/agents/<spec>/` into the agent's home.
+  specs             List available agent type specs.
+
+Each subcommand has its own --help where additional flags exist.
+"""
+
 
 import sys
 from pathlib import Path
@@ -63,7 +82,7 @@ def _status() -> int:
 
 _SPAWN_USAGE = (
     "Usage:\n"
-    "  metasphere-spawn @agent /scope/ \"task description\" [@parent]\n"
+    "  metasphere agent spawn @agent /scope/ \"task description\" [@parent]\n"
     "       [--authority \"...\"] [--responsibility \"...\"] [--accountability \"...\"]\n"
     "\n"
     "Contract fields (strongly recommended, treated as required in a\n"
@@ -472,7 +491,7 @@ def _seed(argv: list[str]) -> int:
 def main(argv: list[str] | None = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
     if argv and argv[0] in ("--help", "-h"):
-        print(__doc__ or "")
+        sys.stdout.write(USAGE)
         return 0
     if not argv or argv[0] in ("list", "--list"):
         project_arg = argv[1] if len(argv) > 1 and not argv[1].startswith("-") else None

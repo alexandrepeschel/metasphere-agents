@@ -4,20 +4,41 @@ Per-project audit: read the project's ``CHANGELOG.md``, find the date
 of the newest entry, run ``git log --since=<date>`` in the registered
 repo, classify the commits, and emit a draft CHANGELOG stanza plus a
 README-staleness flag list.
-
-Intended to run from cron (see :mod:`metasphere.cli.audit_docs
-.register_cron`). The output is a markdown report; auto-PR creation
-is deliberately out of scope for this first cut — operators file the
-PR manually after reviewing the draft. Follow-up PR can wire the
-ephemeral-spawn + auto-PR flow on top of this CLI.
-
-Exit codes:
-    0    report produced (nothing staleness-flagged)
-    1    report produced AND README-staleness flags raised
-    2    precondition failed (unknown project, no repo, etc)
 """
 
 from __future__ import annotations
+
+DESCRIPTION = "Scan commits since the last CHANGELOG entry for doc drift."
+
+USAGE = """\
+Usage: metasphere audit-docs --project <name> [options]
+       metasphere audit-docs register-cron [options]
+
+Default mode (audit): scan commits in the registered project repo
+since the newest CHANGELOG entry, classify them, and write a markdown
+report (CHANGELOG draft + README-staleness flags).
+
+Options:
+  --project <name>   Registered project name to audit (required).
+  --output <dir>     Report directory (default: ~/.metasphere/audits/).
+  --no-notify        Skip the !info message to @orchestrator.
+  --since <window>   Override the CHANGELOG-derived window. Accepts a
+                     bare YYYY-MM-DD (interpreted as 00:00:00 UTC, so
+                     same-day commits are included) or any string git
+                     --since understands.
+
+Subcommand `register-cron`:
+  --project <name>          Only register one project (default: all).
+  --cron-expr "<expr>"      Cron expression (default: "0 18 * * *").
+  --metasphere-bin <path>   Absolute path to the metasphere binary.
+  --dry-run                 List jobs that would be added.
+
+Exit codes:
+  0  report produced, no staleness flags
+  1  report produced, staleness flags raised
+  2  precondition failed (unknown project, no repo)
+"""
+
 
 import argparse
 import datetime as _dt
@@ -408,6 +429,10 @@ def _register_cron(paths: Paths, *,
 
 
 def main(argv: Optional[List[str]] = None) -> int:
+    args_list = list(sys.argv[1:] if argv is None else argv)
+    if args_list and args_list[0] in ("--help", "-h"):
+        sys.stdout.write(USAGE)
+        return 0
     parser = argparse.ArgumentParser(
         prog="metasphere audit-docs",
         description="Scan commits since the last CHANGELOG entry and "
@@ -447,7 +472,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         "included), or any string git's ``--since`` understands.",
     )
 
-    args = parser.parse_args(argv)
+    args = parser.parse_args(args_list)
     paths = resolve()
 
     if args.cmd == "register-cron":

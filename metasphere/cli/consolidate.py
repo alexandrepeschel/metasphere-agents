@@ -1,18 +1,4 @@
-"""``metasphere consolidate`` CLI.
-
-Subcommand surface::
-
-    metasphere consolidate run [--dry-run] [--since 2d] [--stale-window 15]
-    metasphere consolidate --register-job
-    metasphere consolidate --unregister-job
-    metasphere consolidate --status
-
-The ``run`` subcommand walks every active task under the repo and
-classifies each into one of five lifecycle verdicts
-(ACTIVE / STALE / BLOCKED / UNOWNED / DONE) — see
-:mod:`metasphere.consolidate` for the rules and the corresponding
-actions (ping, escalate, archive).
-"""
+"""``metasphere consolidate`` CLI."""
 
 from __future__ import annotations
 
@@ -22,7 +8,30 @@ from metasphere import consolidate as _con
 from metasphere import paths as _paths
 from metasphere import schedule as _sched
 
-_HELP = __doc__ or ""
+
+DESCRIPTION = "Sweep active tasks: classify, ping, escalate, archive."
+
+USAGE = """\
+Usage: metasphere consolidate <command> [args...]
+
+Commands:
+  run [--dry-run] [--since <window>] [--stale-window <minutes>]
+      [--info-archive-after <minutes>]
+                          Walk every active task under the project
+                          root and classify each into ACTIVE / STALE /
+                          BLOCKED / UNOWNED / DONE. Issue the matching
+                          action (ping, escalate, archive) unless
+                          --dry-run is set.
+  --register-job          Register the cron job for this consolidator.
+  --unregister-job        Remove the cron job.
+  --status                Print whether the cron job is registered and
+                          its schedule.
+
+Defaults:
+  --since                 Recent-window for stale detection.
+  --stale-window          Minutes a task can sit idle before STALE
+                          fires.
+"""
 
 
 def _cmd_run(argv: list[str]) -> int:
@@ -142,7 +151,7 @@ def _cmd_status() -> int:
 def main(argv: list[str] | None = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
     if not argv or argv[0] in ("-h", "--help"):
-        sys.stdout.write(_HELP)
+        sys.stdout.write(USAGE)
         return 0
     head, rest = argv[0], argv[1:]
     if head == "run":
@@ -154,7 +163,7 @@ def main(argv: list[str] | None = None) -> int:
     if head == "--status":
         return _cmd_status()
     print(f"metasphere consolidate: unknown subcommand: {head}", file=sys.stderr)
-    sys.stderr.write(_HELP)
+    sys.stderr.write(USAGE)
     return 2
 
 

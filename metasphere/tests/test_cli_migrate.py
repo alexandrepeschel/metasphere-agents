@@ -358,6 +358,7 @@ def test_main_help_exits_0(monkeypatch, tmp_path, capsys):
     monkeypatch.setattr(
         migrate_mod, "resolve", lambda: _make_paths(tmp_path, []),
     )
-    with pytest.raises(SystemExit) as excinfo:
-        migrate_mod.main(["--help"])
-    assert excinfo.value.code == 0
+    rc = migrate_mod.main(["--help"])
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "metasphere migrate-project-dirs" in out

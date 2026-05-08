@@ -1,19 +1,27 @@
-"""``metasphere daemon start|stop|restart|status`` — systemd wrapper.
-
-Thin wrapper over ``systemctl --user`` for the three services that
-together make up the live harness:
-
-- ``metasphere-gateway`` (Telegram poller + orchestrator REPL supervisor)
-- ``metasphere-heartbeat`` (periodic agent wake ticker)
-- ``metasphere-schedule`` (cron-fire scheduler)
-
-Users shouldn't have to know the unit names or remember to restart all
-three after a code pull. ``metasphere daemon restart`` does the right
-thing; no systemd knowledge required. For fine-grained control, pass
-a service name: ``metasphere daemon restart gateway``.
-"""
+"""``metasphere daemon`` — systemd wrapper for the three harness services."""
 
 from __future__ import annotations
+
+DESCRIPTION = "Start/stop/restart/status the three metasphere systemd services."
+
+USAGE = """\
+Usage: metasphere daemon <action> [<service>]
+
+Actions:
+  start    Start the targeted service(s).
+  stop     Stop the targeted service(s).
+  restart  Restart the targeted service(s).
+  status   Print one-line Active state per service.
+
+Services (default: all three):
+  gateway     Telegram poller + orchestrator REPL supervisor.
+  heartbeat   Periodic agent-wake ticker.
+  schedule    Cron-fire scheduler.
+
+With no <service>, every action applies to all three. The order is
+boot-dependency order (gateway, heartbeat, schedule).
+"""
+
 
 import argparse
 import subprocess
@@ -120,8 +128,12 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: Optional[List[str]] = None) -> int:
+    args_list = list(sys.argv[1:] if argv is None else argv)
+    if args_list and args_list[0] in ("--help", "-h"):
+        sys.stdout.write(USAGE)
+        return 0
     parser = build_parser()
-    args = parser.parse_args(argv)
+    args = parser.parse_args(args_list)
     if args.action == "status":
         return cmd_status(args)
     return cmd_lifecycle(args)

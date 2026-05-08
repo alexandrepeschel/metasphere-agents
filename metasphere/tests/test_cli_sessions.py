@@ -35,15 +35,17 @@ def _run(argv, capsys):
 def test_no_args_prints_help_returns_2(capsys):
     rc, out, _ = _run([], capsys)
     assert rc == 2
-    assert "sessions all" in out
-    assert "sessions list" in out
-    assert "sessions kill-viewer" in out
+    assert "metasphere sessions" in out
+    assert "all" in out
+    assert "list" in out
+    assert "kill-viewer" in out
 
 
 def test_help_flag_returns_0(capsys):
     rc, out, _ = _run(["--help"], capsys)
     assert rc == 0
-    assert "sessions all" in out
+    assert "metasphere sessions" in out
+    assert "all" in out
 
 
 def test_short_help_flag_returns_0(capsys):

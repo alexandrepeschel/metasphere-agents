@@ -1,19 +1,34 @@
-"""``metasphere config telegram`` — bootstrap Telegram bot connectivity.
-
-Writes the bot token and chat id to the canonical config files the
-rest of the harness reads, then validates the token with a ``getMe``
-round-trip and (optionally) discovers the chat id by polling for a
-recent ``/start``.
-
-Non-interactive::
-
-    metasphere config telegram --token <token> --chat-id <id>
-
-Interactive (the default when no flags are given): prompts for the
-token, validates it, polls for recent senders, lets you pick one.
-"""
+"""``metasphere config telegram`` — bootstrap Telegram bot connectivity."""
 
 from __future__ import annotations
+
+DESCRIPTION = "Bootstrap Telegram bot token + chat id (interactive or flag-driven)."
+
+USAGE = """\
+Usage: metasphere config telegram [--token <token>] [--chat-id <id>]
+
+Wires up the Telegram bot token and chat id used by the gateway and
+posthook. Validates the token via a getMe round-trip and (in
+interactive mode) discovers the chat id by polling for a recent
+/start message.
+
+Modes:
+  metasphere config telegram
+                       Interactive: prompts for a token, validates it,
+                       polls Telegram for recent senders, lets you
+                       pick a chat id.
+  metasphere config telegram --token <token> [--chat-id <id>]
+                       Non-interactive: validate + persist. Omit
+                       --chat-id to set the token only.
+
+Files written:
+  ~/.metasphere/config/telegram.env        TELEGRAM_BOT_TOKEN=...
+  ~/.metasphere/config/telegram_chat_id    integer chat id
+
+After a successful run, restart the gateway so the new config is
+picked up: `metasphere daemon restart gateway`.
+"""
+
 
 import argparse
 import json
@@ -157,6 +172,10 @@ def _noninteractive_flow(token: str, chat_id: Optional[int]) -> int:
 
 
 def main(argv: Optional[List[str]] = None) -> int:
+    args_list = list(sys.argv[1:] if argv is None else argv)
+    if args_list and args_list[0] in ("--help", "-h"):
+        sys.stdout.write(USAGE)
+        return 0
     parser = argparse.ArgumentParser(
         prog="metasphere config telegram",
         description="Wire up the Telegram bot token and chat id. "
@@ -170,7 +189,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     p_tg.add_argument("--chat-id", type=int, default=None,
                       help="Chat id (non-interactive mode).")
 
-    args = parser.parse_args(argv)
+    args = parser.parse_args(args_list)
     if args.cmd != "telegram":
         parser.print_help()
         return 2

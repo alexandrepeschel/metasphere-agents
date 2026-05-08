@@ -2,33 +2,35 @@
 
 The harness keeps a per-profile copy of ``~/.claude/.credentials.json``
 under ``~/.metasphere/accounts/<name>/credentials.json``. The live
-credential file is a symlink that points at one of the profiles. This
-module replaces the manual ``ln -sf`` dance with a CLI surface so the
-swap is observable, atomic, and testable.
+credential file is a symlink that points at one of the profiles.
 
-Subcommands::
-
-    metasphere accounts list
-    metasphere accounts current
-    metasphere accounts switch <name>
-    metasphere accounts add <name> [--from <path>] [--force]
-    metasphere accounts status
-
-Scope boundaries
-----------------
-- **Linux only.** macOS stores Anthropic OAuth tokens in the keychain,
-  not as a file, so symlink-swap doesn't apply. Every subcommand
-  short-circuits with a clear error on Darwin; a future macOS branch
-  is left as a separate concern.
-- **No daemon hooks. No subprocess into ``claude`` or ``metasphere
-  restart``.** This module is pure file management. Auto-failsafe
-  (detect rate limit -> swap profile -> restart agents) ships as a
-  separate PR so blast radius stays small.
-- **Mode 0600 enforced** on every write to a credential file. ``status``
-  warns on any profile whose mode bits drift.
+Linux only — macOS stores Anthropic OAuth tokens in the keychain, not
+as a file, so symlink-swap doesn't apply. Mode 0600 is enforced on
+every write to a credential file.
 """
 
 from __future__ import annotations
+
+DESCRIPTION = "Manage Anthropic OAuth credential profiles via symlink swap."
+
+USAGE = """\
+Usage: metasphere accounts <command> [args...]
+
+Commands:
+  list                          List profiles in ~/.metasphere/accounts/.
+  current                       Print the active profile name.
+  switch <name>                 Atomically retarget the credentials
+                                symlink to <name>.
+  add <name> [--from <path>] [--force]
+                                Capture a profile from --from <path>,
+                                or snapshot the live credentials file.
+                                --force overwrites an existing profile.
+  status                        Show symlink integrity, target file
+                                presence, and per-profile mode + mtime.
+
+Linux only. macOS short-circuits with a clear error.
+"""
+
 
 import argparse
 import os
@@ -332,12 +334,16 @@ _HANDLERS = {
 
 
 def main(argv: Optional[list[str]] = None) -> int:
+    args_list = list(sys.argv[1:] if argv is None else argv)
+    if args_list and args_list[0] in ("--help", "-h"):
+        sys.stdout.write(USAGE)
+        return 0
     rc = _refuse_on_darwin()
     if rc is not None:
         return rc
 
     parser = _build_parser()
-    args = parser.parse_args(argv)
+    args = parser.parse_args(args_list)
     if not args.cmd:
         parser.print_help()
         return 0

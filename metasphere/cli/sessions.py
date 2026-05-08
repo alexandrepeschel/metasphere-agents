@@ -1,20 +1,27 @@
-"""CLI: ``metasphere sessions`` — multi-agent observability.
-
-    sessions all           Build and attach a viewer tmux session that
-                           shows every alive persistent agent as a
-                           linked window. Idempotent: re-running drops
-                           the old viewer and rebuilds from current state.
-    sessions list          Print alive persistent agents and their tmux
-                           session names.
-    sessions kill-viewer   Tear down the viewer session without
-                           touching source sessions.
-
-The viewer is named ``metasphere-all``. Source sessions are untouched;
-``tmux link-window`` is non-destructive, and killing the viewer just
-drops the linked references. Detach with ``Ctrl+b d`` as usual.
-"""
+"""CLI: ``metasphere sessions`` — multi-agent observability."""
 
 from __future__ import annotations
+
+DESCRIPTION = "Multi-agent tmux viewer: build, list, or tear down the viewer."
+
+USAGE = """\
+Usage: metasphere sessions <command>
+
+Commands:
+  all            Build and attach a viewer tmux session showing every
+                 alive persistent agent as a linked window. Idempotent:
+                 re-running drops the old viewer and rebuilds.
+  list           Print alive persistent agents and their tmux session
+                 names.
+  ls             Alias for `list`.
+  kill-viewer    Tear down the viewer session without touching the
+                 source sessions.
+
+The viewer is named `metasphere-all`. Source sessions are untouched
+(tmux link-window is non-destructive); killing the viewer just drops
+the linked references. Detach with Ctrl+b d as usual.
+"""
+
 
 import sys
 
@@ -73,13 +80,13 @@ _SUBCOMMANDS = {
 def main(argv: list[str] | None = None) -> int:
     args = list(argv if argv is not None else sys.argv[1:])
     if not args or args[0] in ("--help", "-h"):
-        print(__doc__ or "")
+        sys.stdout.write(USAGE)
         return 0 if args else 2
     cmd, rest = args[0], args[1:]
     handler = _SUBCOMMANDS.get(cmd)
     if handler is None:
         print(f"unknown subcommand: {cmd}", file=sys.stderr)
-        print(__doc__ or "", file=sys.stderr)
+        sys.stderr.write(USAGE)
         return 2
     return handler(rest)
 

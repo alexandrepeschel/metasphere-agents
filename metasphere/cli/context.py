@@ -1,25 +1,30 @@
 """Stdout-only emitter for the per-turn context block.
 
-Wired in claude-code as the ``UserPromptSubmit`` hook command:
-
-    python3 -m metasphere.cli.context
-
-In addition to printing the context block to stdout, this entry point
-writes a per-turn success **breadcrumb** so the Stop posthook can
-*fail closed* when the context build crashed. See
-``metasphere.breadcrumbs`` for the protocol — without a matching
-success breadcrumb the posthook MUST suppress the auto-forward of the
-assistant's reply to Telegram, since the reply was generated against
-an incomplete context block.
-
-Reads ``session_id`` and ``transcript_path`` from the claude-code hook
-payload on stdin. If stdin is not a JSON payload (e.g. the binary is
-invoked directly from a shell), no breadcrumb is written — the
-posthook treats absence as failure too, which is the correct
-fail-closed default.
+Wired into claude-code as the UserPromptSubmit hook. In addition to
+printing the context block to stdout, this entry point writes a
+per-turn success breadcrumb so the Stop posthook can fail-closed when
+the context build crashed. Reads session_id and transcript_path from
+the claude-code hook payload on stdin.
 """
 
 from __future__ import annotations
+
+
+DESCRIPTION = "UserPromptSubmit hook: emit the per-turn context block."
+
+USAGE = """\
+Usage: metasphere hooks context
+
+UserPromptSubmit hook entrypoint. Wired into Claude Code via the
+~/.metasphere/.claude/settings.local.json hooks block. Not invoked
+directly by humans except for debugging.
+
+Reads a JSON hook payload (session_id, transcript_path) from stdin
+and writes a per-turn success breadcrumb so the Stop posthook can
+fail-closed when context construction crashes.
+
+Output: the rendered per-turn context block on stdout, exit code 0.
+"""
 
 import json
 import sys
@@ -42,6 +47,10 @@ def _parse_payload(stdin_bytes: bytes) -> dict:
 
 
 def main(argv: list[str] | None = None) -> int:
+    args_list = list(sys.argv[1:] if argv is None else argv)
+    if args_list and args_list[0] in ("--help", "-h"):
+        sys.stdout.write(USAGE)
+        return 0
     # Read stdin defensively — manual invocation from a shell has no
     # JSON payload, in which case the breadcrumb write is skipped and
     # the posthook will fail-closed for that session (correct).

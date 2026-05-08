@@ -89,7 +89,7 @@ def test_subcommand_help_does_not_crash(subcmd, capsys):
 def test_hooks_unknown_subcommand_exits_2(capsys):
     rc, _, err = _run(["hooks", "nope"], capsys)
     assert rc == 2
-    assert "unknown subcommand" in err
+    assert "unknown sub-event" in err
 
 
 def test_telegram_groups_routes_to_groups_module(monkeypatch, capsys):

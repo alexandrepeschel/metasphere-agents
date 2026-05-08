@@ -1,19 +1,26 @@
-"""``metasphere logs [gateway|heartbeat|schedule|events] [-f] [--lines N]``.
-
-Tail the appropriate log file for daemon debugging:
-
-- ``gateway``    → ``~/.metasphere/logs/gateway.log``
-- ``heartbeat``  → ``~/.metasphere/logs/heartbeat.log``
-- ``schedule``   → ``~/.metasphere/logs/schedule.log``
-- ``events``     → today's ``~/.metasphere/events/events-YYYY-MM-DD.jsonl``
-                   (pretty-printed JSON, one record per line)
-
-``--lines N`` controls the initial tail size (default 50). ``-f`` / ``--follow``
-streams new content as it arrives (like ``tail -f``). Without ``-f`` the
-command prints the last N lines and exits.
-"""
+"""``metasphere logs`` — tail metasphere service logs."""
 
 from __future__ import annotations
+
+DESCRIPTION = "Tail gateway / heartbeat / schedule / events logs."
+
+USAGE = """\
+Usage: metasphere logs <service> [--lines N] [-f]
+
+Services:
+  gateway     ~/.metasphere/logs/gateway.log
+  heartbeat   ~/.metasphere/logs/heartbeat.log
+  schedule    ~/.metasphere/logs/schedule.log
+  events      Today's ~/.metasphere/events/events-YYYY-MM-DD.jsonl
+              (pretty-printed JSON, one record per line).
+
+Options:
+  --lines N, -n N   Initial tail size (default 50).
+  -f, --follow      Follow appended output (like `tail -f`).
+
+Without -f, the command prints the last N lines and exits.
+"""
+
 
 import argparse
 import json
@@ -117,6 +124,10 @@ def _follow(path: Path, *, is_events: bool,
 
 
 def main(argv: Optional[List[str]] = None) -> int:
+    args_list = list(sys.argv[1:] if argv is None else argv)
+    if args_list and args_list[0] in ("--help", "-h"):
+        sys.stdout.write(USAGE)
+        return 0
     parser = argparse.ArgumentParser(
         prog="metasphere logs",
         description="Tail metasphere service logs. Replaces ``journalctl "
@@ -130,7 +141,7 @@ def main(argv: Optional[List[str]] = None) -> int:
                         help="Initial tail size (default 50).")
     parser.add_argument("-f", "--follow", action="store_true",
                         help="Follow appended output (like tail -f).")
-    args = parser.parse_args(argv)
+    args = parser.parse_args(args_list)
 
     paths = resolve()
     path = _service_path(args.service, paths)

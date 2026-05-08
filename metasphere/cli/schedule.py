@@ -1,17 +1,28 @@
-"""CLI shim mirroring ``scripts/metasphere-schedule``.
-
-Usage::
-
-    python -m metasphere.cli.schedule                  # default = list
-    python -m metasphere.cli.schedule list
-    python -m metasphere.cli.schedule run              # one tick
-    python -m metasphere.cli.schedule daemon [N]       # loop, default 60s
-    python -m metasphere.cli.schedule enable <id>
-    python -m metasphere.cli.schedule disable <id>
-    python -m metasphere.cli.schedule wire-exit-self [--dry-run]
-"""
+"""CLI for the cron-style job scheduler."""
 
 from __future__ import annotations
+
+DESCRIPTION = "Cron-style job scheduler: list, run, enable, disable, daemon."
+
+USAGE = """\
+Usage: metasphere schedule [<command>] [args...]
+
+Commands:
+  (no args)                  Default = list.
+  list [project]             List all configured cron jobs.
+  run                        Fire one tick: dispatch every job whose
+                             schedule matches now.
+  daemon [<interval>]        Long-running scheduler loop. Default
+                             tick interval is 60 seconds.
+  enable <id>                Re-enable a disabled job by id.
+  disable <id>               Disable a job by id (it stays in the
+                             registry but does not fire).
+  wire-exit-self [--dry-run] Append the canonical exit-self payload to
+                             every job that lacks one.
+
+Job definitions live in `~/.metasphere/cron/<id>.yaml`.
+"""
+
 
 import datetime as _dt
 import sys
@@ -99,7 +110,7 @@ def _cmd_set_enabled(job_id: str, enabled: bool) -> int:
 def main(argv: list[str] | None = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
     if argv and argv[0] in ("--help", "-h"):
-        print(__doc__ or "")
+        sys.stdout.write(USAGE)
         return 0
     cmd = argv[0] if argv else "list"
     rest = argv[1:]
@@ -119,7 +130,7 @@ def main(argv: list[str] | None = None) -> int:
         from metasphere.cli.wire_exit_self import main as _wire_main
         return _wire_main(rest)
 
-    print(__doc__, file=sys.stderr)
+    sys.stderr.write(USAGE)
     return 2
 
 

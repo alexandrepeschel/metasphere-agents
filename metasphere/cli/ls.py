@@ -1,24 +1,30 @@
 """``metasphere ls`` — project / task / agent landscape.
 
-Pure-Python port of the legacy ``cmd_ls`` function from the deleted
-``scripts/metasphere`` bash script. Two modes::
+Two modes:
 
-    metasphere ls            # top-level landscape (projects, events,
-                             # agents grouped by status, tasks, msgs)
-    metasphere ls @agent     # deep dive on a single agent
+    metasphere ls            top-level landscape (projects, events,
+                             agents grouped by status, tasks, msgs)
+    metasphere ls @agent     deep dive on a single agent
 
 Output is deliberately terse and line-oriented so it works the same in
 an interactive TTY and when piped to a log. TTY-only ANSI colour is
-used when ``sys.stdout.isatty()``; everything else stays plain.
-
-The bash version also shelled out to ``jq`` for the events timestamp
-re-formatting and to the old ``scripts/tasks`` bin for a task table.
-Both are now delegated to the canonical Python modules
-(:mod:`metasphere.events` + :mod:`metasphere.tasks`) so we render from
-the same source of truth the rest of the CLI uses.
+used when sys.stdout.isatty(); everything else stays plain.
 """
 
 from __future__ import annotations
+
+DESCRIPTION = "Print the project / task / agent landscape (or per-agent detail)."
+
+USAGE = """\
+Usage: metasphere ls [@agent | project-name]
+
+  (no arg)      Show top-level landscape: projects, recent events,
+                agents grouped by liveness, active tasks, unread
+                messages.
+  @agent        Show the detail view for one agent.
+  project-name  Show the landscape filtered to one project.
+"""
+
 
 import json
 import os
@@ -418,12 +424,7 @@ def _agent_event_tail(paths: Paths, agent: str, n: int) -> list[str]:
 
 def main(argv: list[str]) -> int:
     if argv and argv[0] in ("-h", "--help"):
-        sys.stdout.write(
-            "Usage: metasphere ls [@agent | project-name]\n"
-            "  (no arg)      Show top-level landscape\n"
-            "  @agent        Show detail view for that agent\n"
-            "  project-name  Show landscape filtered to one project\n"
-        )
+        sys.stdout.write(USAGE)
         return 0
 
     paths = _paths.resolve()

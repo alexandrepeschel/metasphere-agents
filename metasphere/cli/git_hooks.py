@@ -1,14 +1,26 @@
-"""CLI: ``python -m metasphere.cli.git_hooks``.
-
-Two roles:
-
-* admin: ``install [path]`` / ``uninstall [path]`` / ``status [path]``
-* hook event handlers (called by the installed shims):
-  ``pre-commit`` / ``post-commit`` / ``post-checkout <prev> <new> <flag>``
-  / ``pre-push <remote> <url>``
-"""
+"""CLI for git hook installation + per-event handlers."""
 
 from __future__ import annotations
+
+
+DESCRIPTION = "Install/uninstall git hook shims + per-event handlers."
+
+USAGE = """\
+Usage: metasphere hooks git <command> [args...]
+
+Admin commands:
+  install [path] [--dry-run]
+                          Install the metasphere git hook shims into
+                          [path]/.git/hooks/ (default: cwd).
+  uninstall [path]        Remove metasphere shims from [path].
+  status [path]           Print hook installation status for [path].
+
+Event handlers (invoked by the installed shims, not by hand):
+  pre-commit
+  post-commit
+  post-checkout <prev> <new> <flag>
+  pre-push <remote> <url>
+"""
 
 import sys
 from pathlib import Path
@@ -29,10 +41,10 @@ from metasphere.paths import resolve
 def main(argv: list[str] | None = None) -> int:
     args = list(argv if argv is not None else sys.argv[1:])
     if args and args[0] in ("--help", "-h"):
-        print(__doc__ or "")
+        sys.stdout.write(USAGE)
         return 0
     if not args:
-        print(__doc__, file=sys.stderr)
+        sys.stderr.write(USAGE)
         return 2
     cmd, *rest = args
     paths = resolve()

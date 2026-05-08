@@ -1,30 +1,4 @@
-"""CLI: ``metasphere restart``.
-
-Wholesale restart of systemd daemons and/or agent tmux sessions.
-
-Usage::
-
-    metasphere restart                 # daemons + all alive agent sessions
-    metasphere restart <agent-name>    # restart one agent's tmux session
-    metasphere restart -h | --help
-
-Behavior:
-    Without args: restart ``metasphere-heartbeat``, ``metasphere-gateway``
-    and ``metasphere-schedule`` (systemd ``--user``), then kill+respawn
-    every alive persistent agent's tmux session, including
-    ``@orchestrator``. If invoked from inside the orchestrator pane,
-    that restart will kill the caller — a warning is printed first
-    and the orchestrator is restarted last.
-
-    With ``<agent-name>``: kill just that agent's tmux session and
-    re-spawn it via :func:`metasphere.agents.wake_persistent`. Daemons
-    untouched. Unknown agents get a suggestion of near matches via
-    :mod:`difflib`.
-
-Wraps the long-form recipe operators were hand-typing (``systemctl --user
-restart metasphere-{heartbeat,gateway,schedule}`` + per-agent
-``tmux kill-session`` + manual ``metasphere agent wake``).
-"""
+"""CLI: ``metasphere restart`` — wholesale daemon + agent restart."""
 
 from __future__ import annotations
 
@@ -44,7 +18,27 @@ _DAEMONS = (
     "metasphere-schedule",
 )
 
-_HELP = __doc__ or ""
+DESCRIPTION = "Restart all daemons + alive agent tmux sessions (or one agent)."
+
+USAGE = """\
+Usage: metasphere restart [<agent-name>]
+
+Without args:
+  Restart the three systemd user services (gateway, heartbeat,
+  schedule), then kill + respawn every alive persistent agent's tmux
+  session — including @orchestrator. If invoked from inside the
+  orchestrator pane, that restart kills the caller; a warning is
+  printed first and the orchestrator is restarted last so earlier
+  work completes.
+
+With <agent-name>:
+  Kill just that agent's tmux session and re-spawn it. Daemons are
+  untouched. Unknown agent names get near-match suggestions.
+
+Use this in place of the long-form recipe:
+  systemctl --user restart metasphere-{gateway,heartbeat,schedule}
+  + per-agent tmux kill-session + manual `metasphere agent wake`.
+"""
 
 
 def _systemctl(*args: str) -> int:
@@ -225,7 +219,7 @@ def _restart_one(agent_name: str, paths: Paths) -> int:
 def main(argv: list[str] | None = None) -> int:
     args = list(argv if argv is not None else sys.argv[1:])
     if args and args[0] in ("-h", "--help"):
-        sys.stdout.write(_HELP)
+        sys.stdout.write(USAGE)
         return 0
 
     paths = resolve()

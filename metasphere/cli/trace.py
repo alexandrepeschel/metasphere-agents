@@ -1,14 +1,23 @@
-"""CLI: ``python -m metasphere.cli.trace``.
-
-Subcommands::
-
-    trace capture <argv...>
-    trace list [--errors] [--limit N]
-    trace search <pattern>
-    trace prune <days>
-"""
+"""CLI for the trace subsystem."""
 
 from __future__ import annotations
+
+DESCRIPTION = "Capture, list, search, and prune command traces."
+
+USAGE = """\
+Usage: metasphere trace <command> [args...]
+
+Commands:
+  capture <argv...>            Run <argv...>, record exit code,
+                               stdout/stderr, and command for later
+                               inspection.
+  list [--errors] [--limit N]  List recent traces.
+  search <pattern>             Grep across captured traces.
+  prune <days>                 Delete traces older than <days>.
+
+Trace records live under `~/.metasphere/state/traces/`.
+"""
+
 
 import json
 import sys
@@ -30,10 +39,10 @@ def _print_trace_row(t) -> None:
 def main(argv: list[str] | None = None) -> int:
     args = list(argv if argv is not None else sys.argv[1:])
     if args and args[0] in ("--help", "-h"):
-        print(__doc__ or "")
+        sys.stdout.write(USAGE)
         return 0
     if not args:
-        print(__doc__, file=sys.stderr)
+        sys.stderr.write(USAGE)
         return 2
     cmd, *rest = args
     paths = resolve()
