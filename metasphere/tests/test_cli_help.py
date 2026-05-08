@@ -23,6 +23,7 @@ CLI_MODULES = [
     "trace",
     "session",
     "project",
+    "version",
 ]
 
 
@@ -34,3 +35,20 @@ def test_cli_help_exits_zero(name, flag, tmp_paths, capsys):
     assert rc == 0, f"{name} {flag} returned {rc}"
     out = capsys.readouterr().out
     assert out.strip(), f"{name} {flag} printed nothing on stdout"
+
+
+@pytest.mark.parametrize("flag", ["--help", "-h"])
+def test_status_help_does_not_run_status(flag, tmp_paths, capsys):
+    """``metasphere status --help`` must print help, not query tmux/tasks.
+
+    Regression: ``_status`` previously ignored argv and unconditionally
+    rendered the live system summary, surprising users who passed
+    ``--help`` expecting a usage message.
+    """
+    from metasphere.cli import main as _main
+
+    rc = _main._status([flag])
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "Usage:" in out
+    assert "Sessions:" not in out

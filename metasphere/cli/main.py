@@ -131,8 +131,22 @@ def _hooks_dispatch(argv: list[str]) -> int:
     return _resolve(table[head])(rest) or 0
 
 
+_STATUS_HELP = """\
+Usage: metasphere status
+
+Print a single-screen summary of the running system: tmux agent sessions
+(grouped by liveness), active task count, enabled cron job count,
+initialized projects, and orchestrator liveness.
+
+Takes no arguments.
+"""
+
+
 def _status(argv: list[str]) -> int:
     """``metasphere status`` — pure-Python system status summary."""
+    if argv and argv[0] in ("--help", "-h"):
+        sys.stdout.write(_STATUS_HELP)
+        return 0
     from metasphere.status import summary
     sys.stdout.write(summary() + "\n")
     return 0
