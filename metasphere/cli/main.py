@@ -35,7 +35,6 @@ def main(argv: list[str] | None = None) -> int:
         sys.stderr.write(f"metasphere: unknown subcommand: {head}\n\n")
         sys.stderr.write(_registry.render_top_help())
         return 2
-    sys._metasphere_head = head  # type: ignore[attr-defined]
     handler = _registry.resolve(head)
     rc = handler(rest)
     return int(rc or 0)
