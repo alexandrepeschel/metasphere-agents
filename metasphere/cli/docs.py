@@ -13,8 +13,7 @@ Usage: metasphere docs [--check] [--output PATH]
 
 Regenerate the CLI reference document by walking the subcommand
 registry and reading each handler's DESCRIPTION + USAGE constants.
-Output defaults to docs/CLI.md relative to the repo root (resolved by
-walking up from this file).
+Output defaults to docs/CLI.md in the metasphere-agents repo.
 
 Options:
   --check          Compare against the existing file and exit non-zero
@@ -67,7 +66,7 @@ def main(argv: list[str] | None = None) -> int:
 
     if check:
         existing = out.read_text() if out.exists() else ""
-        if existing.strip() == rendered.strip():
+        if existing == rendered:
             sys.stdout.write(f"docs: {out} is up to date\n")
             return 0
         sys.stderr.write(f"docs: {out} is stale; run `metasphere docs`\n")

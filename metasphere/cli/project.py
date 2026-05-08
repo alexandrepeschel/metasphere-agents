@@ -35,8 +35,6 @@ Other:
                                 Telegram topic.
   changelog [name]              Show the project changelog.
   learnings [name]              Show the project LEARNINGS file.
-
-Heavy modules are lazy-imported so `--help` stays cheap.
 """
 
 

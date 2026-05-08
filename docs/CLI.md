@@ -389,8 +389,6 @@ Other:
                                 Telegram topic.
   changelog [name]              Show the project changelog.
   learnings [name]              Show the project LEARNINGS file.
-
-Heavy modules are lazy-imported so `--help` stays cheap.
 ```
 
 ### `metasphere gateway`
@@ -616,8 +614,7 @@ Usage: metasphere docs [--check] [--output PATH]
 
 Regenerate the CLI reference document by walking the subcommand
 registry and reading each handler's DESCRIPTION + USAGE constants.
-Output defaults to docs/CLI.md relative to the repo root (resolved by
-walking up from this file).
+Output defaults to docs/CLI.md in the metasphere-agents repo.
 
 Options:
   --check          Compare against the existing file and exit non-zero
