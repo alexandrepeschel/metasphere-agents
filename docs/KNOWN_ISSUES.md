@@ -32,11 +32,11 @@ the line — history is signal). Newest at top of each section.
       Decision-as-shipped: warm session for ≤2h, cold-start beyond that, hard-reap at 24h.
       Verified live: @explorer kill at idle=14429s on 2026-05-07T12:00:59Z.
 
-- [ ] **Spawned child in `-p` mode doesn't engage tools** — child process runs and exits cleanly but only prints "Done." with no tool calls. The harness markdown as the entire `-p` prompt is too descriptive / not action-imperative enough. Headless claude treats it as a doc, not a task.
+- [x] **Spawned child in `-p` mode doesn't engage tools** — child process runs and exits cleanly but only prints "Done." with no tool calls. The harness markdown as the entire `-p` prompt is too descriptive / not action-imperative enough. Headless claude treats it as a doc, not a task.
       Where: `scripts/metasphere-spawn` harness template + invocation strategy
       Repro: spawn @smoke-test with a "send message back" task — process exits 0, status updates, but no message sent back.
       Hypotheses: (a) need to append an explicit "BEGIN. Execute the task now using bash." imperative at the end of the harness, (b) headless mode may need `--allowedTools "Bash,Read,Write,Edit"` explicitly, (c) the SPIRAL/Communication sections describe machinery without saying "do this now".
-      Next: try option (a) + (b) together.
+      Resolved (@explorer 2026-05-09): the bash-era bug doesn't reproduce on the Python spawn path. `bin/metasphere-spawn` is gone; `metasphere agent spawn` lives in `metasphere/agents.py::spawn_agent` (line 339), invoking `claude -p <harness> --dangerously-skip-permissions` against `templates/agent-harness.md`. The new harness opens with imperative framing ("First thing: read your SOUL", followed by a concrete Communication / Task System / Tools surface) rather than the descriptive SPIRAL/Communication block from the bash era. Live evidence today (2026-05-09): two ephemerals completed multi-tool work end-to-end — `eph-bootstrap-frontend-repo` ran `gh repo create`, `pnpm dlx shadcn`, multiple commits + push (output a513286, see daily/2026-05-09.md 15:20Z), and `eph-author-frontend-brainstorming` shipped 5 commits authoring docs/brainstorming/01-04 + README. Tool engagement is reliable on the current path. The original `scripts/metasphere-spawn` script and bash harness no longer exist on disk.
 
 - [x] **Telegram send wrapper chokes on markdown chars** — `send_message()` defaulted to `parse_mode=Markdown` and used `-d "text=$text"` (no urlencode). Fixed: default parse_mode is now empty (plain text), always uses `--data-urlencode`. Markdown is opt-in via the third arg. (Fixed this session.)
 
