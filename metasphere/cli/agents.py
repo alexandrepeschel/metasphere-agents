@@ -52,9 +52,25 @@ def _list(project_filter: str | None = None) -> int:
     if project_filter:
         header = f"Persistent agents [{project_filter}]:"
     print(header)
+
+    # Group: global (project == "") first, then project-scoped buckets
+    # alphabetically. Within each bucket sort by name.
+    buckets: dict[str, list] = {}
     for a in persistent:
-        marker = "●" if _agents.session_alive(a.session_name) else "○"
-        print(f"  {marker} {a.name}")
+        buckets.setdefault(getattr(a, "project", "") or "", []).append(a)
+    for v in buckets.values():
+        v.sort(key=lambda a: a.name)
+    bucket_order = []
+    if "" in buckets:
+        bucket_order.append("")
+    bucket_order.extend(sorted(k for k in buckets if k))
+
+    for project in bucket_order:
+        label = project if project else "global"
+        print(f"  {label}/")
+        for a in buckets[project]:
+            marker = "●" if _agents.session_alive(a.session_name) else "○"
+            print(f"    {marker} {a.name}")
     return 0
 
 

@@ -69,8 +69,9 @@ the line — history is signal). Newest at top of each section.
 
 ## Low
 
-- [ ] **Agent tree doesn't look like a tree** — `metasphere agents` flat list, no hierarchy.
+- [x] **Agent tree doesn't look like a tree** — `metasphere agents` flat list, no hierarchy.
       Related task: `make-agent-tree-actually-look-like-a-tree-20260406`
+      Resolved (@explorer 2026-05-09): `metasphere agent list` now groups persistent agents by project. Global agents (empty project sidecar) print under a `global/` header first; project-scoped agents print under per-project headers (`worldwire/`, `recurse/`, …) alphabetically; agents within each bucket sorted by name. Implementation in `metasphere/cli/agents.py::_list`; coverage in `test_cli_agents.py` (4 cases: bucket order, global-omitted-when-empty, filter under tree layout, empty-state message). The `--project <name>` filter continues to work and renders the same shape with one bucket. Header line preserved so existing screen scrapers still match.
 
 - [x] **Stale agents in registry** — `~/.metasphere/agents/` contains agents from old sessions (`@coding-integration`, `@coding-simple`, `@main`, `@night`, `@research-gather`, `@research-synthesize`, `@smoke-test`) with no GC.
       Resolved (@explorer 2026-05-08): all 7 named agents are gone from the registry. Ephemeral GC now ships in `metasphere/consolidate.py::_gc_ephemeral_agents` — agents without `MISSION.md`/`persona-index.md` are reaped once their tmux+pid go cold; persistent personas are exempt by design.
