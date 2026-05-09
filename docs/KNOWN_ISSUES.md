@@ -43,8 +43,9 @@ the line — history is signal). Newest at top of each section.
 - [x] **`~/.metasphere/bin/` was copies, not symlinks** — install.sh `cp`s scripts into bin, so any repo edit silently failed to take effect until reinstall. This invalidated all prior fixes in this session until the symlink conversion. Fixed: converted all 22 scripts in `~/.metasphere/bin/` to symlinks pointing at `$REPO/scripts/$name`. Backup at `~/.metasphere/bin.backup-20260407/`. install.sh should be updated to symlink by default.
       Follow-up: patch `install.sh` to use `ln -sf` instead of `cp` for the bin install step.
 
-- [ ] **Telegram slash commands still point at openclaw** — `/inbox`, `/tasks`, `/schedule`, `/help` haven't been re-registered with BotFather for metasphere.
+- [x] **Telegram slash commands still point at openclaw** — `/inbox`, `/tasks`, `/schedule`, `/help` haven't been re-registered with BotFather for metasphere.
       Related task: `register-slash-commands-with-botfather-setmycommands-20260406`
+      Resolved (@explorer 2026-05-09): `metasphere/gateway/daemon.py` calls `register_bot_commands()` on every boot (commit 4af3622, 2026-04-08), publishing `BOT_COMMANDS_MANIFEST` from `metasphere/telegram/commands.py` via the Telegram `setMyCommands` API. Live verify against the bot: 15 commands registered, including `/tasks`, `/schedule`, `/help` plus the metasphere-correct surface (`/agents`, `/team`, `/specs`, `/send`, `/projects`, `/messages`, `/spot`, `/events`, `/memory`, `/ping`, `/session`, `/status`). `/inbox` was retired in favour of `/messages` for the canonical name; the typed `/inbox` still routes via the dispatch table for any cached autocomplete. The 2026-04-06 task lives under `.tasks/completed/`.
 
 - [x] **Tasks not properly cleaned up** — completed/stale tasks linger in `.tasks/active/`.
       Where: `scripts/tasks` (move-on-done logic missing or broken?)
