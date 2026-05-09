@@ -736,6 +736,31 @@ def test_touch_last_active_normalises_missing_at_prefix(tmp_paths: Paths):
     assert (tmp_paths.agents / "@bare-name" / "last_active").is_file()
 
 
+def test_touch_last_active_writes_to_project_scoped_dir_when_present(
+    tmp_paths: Paths,
+):
+    """Project-scoped agents (e.g. @install-lead under metasphere-agents)
+    must have last_active written into their project-scoped dir, not the
+    global ~/.metasphere/agents/<id>/. Witnessed bug (2026-05-09): the
+    helper unconditionally wrote to the global path, creating a ghost
+    dir with no MISSION.md that consolidate._gc_ephemeral_agents()
+    classified as a dead ephemeral and deleted — five minutes later the
+    next hook recreated it. Infinite churn cycle."""
+    proj_agent = tmp_paths.projects / "testproj" / "agents" / "@scoped"
+    proj_agent.mkdir(parents=True)
+    (proj_agent / "MISSION.md").write_text("be a thing")
+
+    agents.touch_last_active("@scoped", paths=tmp_paths)
+
+    assert (proj_agent / "last_active").is_file(), (
+        "project-scoped dir must receive the timestamp"
+    )
+    assert not (tmp_paths.agents / "@scoped").exists(), (
+        "global ghost dir must NOT be created when project-scoped dir "
+        "already exists; that's the GC-churn vector"
+    )
+
+
 def test_reap_dormant_skips_when_last_active_is_fresh(tmp_paths: Paths):
     """Hook-event refresh blocks the reap. Even if tmux reports the
     session has been idle for hours (the session_activity-only path

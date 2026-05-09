@@ -775,7 +775,13 @@ def touch_last_active(agent: str, paths: Paths | None = None) -> None:
     try:
         paths = paths or resolve()
         name = _normalize_name(agent)
-        agent_dir = paths.agent_dir(name)
+        # Project-scoped agents (e.g. @install-lead under metasphere-agents)
+        # live at ~/.metasphere/projects/<proj>/agents/<id>/, not the
+        # global ~/.metasphere/agents/<id>/. Writing to the global path
+        # creates a MISSION-less ghost dir that the ephemeral GC sweeps,
+        # which then races touch_last_active in a 5-min churn cycle.
+        # find_agent_dir() prefers the project-scoped dir when one exists.
+        agent_dir = paths.find_agent_dir(name) or paths.agent_dir(name)
         agent_dir.mkdir(parents=True, exist_ok=True)
         _atomic_meta_write(agent_dir, _LAST_ACTIVE_FILENAME, _utcnow())
     except Exception:  # noqa: BLE001 — hook-path; never raise
