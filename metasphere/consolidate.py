@@ -120,6 +120,13 @@ REQUIRED_ACTION_LABELS = frozenset({"!task", "!query", "!urgent"})
 #: reply, complete it, or upgrade the label.
 READ_ARCHIVE_AFTER_DAYS = 3
 
+#: Hard ceiling on a !urgent message that has already run the full
+#: escalation ladder (ping_count past threshold, orchestrator already
+#: notified) and continues to age in inbox. Beyond this we treat the
+#: original urgency as resolved-by-attrition and archive instead of
+#: cycling the noop-pinged-out arm forever.
+URGENT_LADDER_EXHAUSTED_ARCHIVE_AFTER_DAYS = 7
+
 # Built-in system agents that are virtual — no agent_dir on disk
 # anywhere — and therefore have no human/REPL reader behind them.
 # Used as a fast-path for `_is_no_reader` and as a fallback when no
@@ -1019,6 +1026,21 @@ def classify_message(
         # GC'd ephemeral), pinging just spawns another no-reader
         # message that itself ages into STALE — a self-sustaining loop.
         if _is_no_reader(msg.to, paths):
+            return MSG_VERDICT_INFO_AUTO_ARCHIVE
+        # !urgent ladder-exhausted exit: once ping_count has carried
+        # the message past the orchestrator-escalation phase and the
+        # message has been read for 7+ days, the original urgency has
+        # either been absorbed into other work or the user has chosen
+        # not to act. The noop-pinged-out arm in apply_message_verdict
+        # would otherwise keep firing forever (witnessed pre-2026-05-09
+        # cleanup: ping_count 100-680 across stuck !urgent messages).
+        if (
+            msg.label == "!urgent"
+            and msg.ping_count > PING_ESCALATE_THRESHOLD_DEFAULT
+            and (now - read_at) >= _dt.timedelta(
+                days=URGENT_LADDER_EXHAUSTED_ARCHIVE_AFTER_DAYS
+            )
+        ):
             return MSG_VERDICT_INFO_AUTO_ARCHIVE
         # Cooldown: if we pinged recently, leave alone.
         last_ping = _parse_iso(msg.last_pinged_at)

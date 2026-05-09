@@ -863,6 +863,52 @@ def test_msg_classify_read_recent_ad_hoc_is_active(repo, tmp_paths):
     assert _con.classify_message(m_) == _con.MSG_VERDICT_ACTIVE
 
 
+def _set_ping_count(msg: _msgs.Message, n: int) -> _msgs.Message:
+    text = msg.path.read_text()
+    text = text.replace(f"ping_count: {msg.ping_count}", f"ping_count: {n}")
+    msg.path.write_text(text)
+    return _msgs.read_message(msg.path)
+
+
+def test_msg_classify_urgent_ladder_exhausted_auto_archives(repo, tmp_paths):
+    """!urgent that has run past the orchestrator-escalation phase and
+    been read for >7 days must auto-archive — the noop-pinged-out arm
+    in apply_message_verdict would otherwise loop forever (witnessed
+    pre-2026-05-09: ping_count 100-680 on stuck !urgent messages)."""
+    m_ = _send_msg(tmp_paths, "!urgent")
+    days = _con.URGENT_LADDER_EXHAUSTED_ARCHIVE_AFTER_DAYS + 1
+    m_ = _age_msg(m_, read_min_ago=days * 24 * 60)
+    m_ = _set_ping_count(m_, _con.PING_ESCALATE_THRESHOLD_DEFAULT + 1)
+    assert _con.classify_message(m_) == _con.MSG_VERDICT_INFO_AUTO_ARCHIVE
+
+
+def test_msg_classify_urgent_ladder_exhausted_within_window_stays_stale(
+    repo, tmp_paths,
+):
+    """Inside the 7-day ladder-exhausted window the !urgent stays
+    STALE — the noop-pinged-out arm still runs (it carries throttle
+    state). Only past +7 days does the verdict flip to archive."""
+    m_ = _send_msg(tmp_paths, "!urgent")
+    # 5 days < URGENT_LADDER_EXHAUSTED_ARCHIVE_AFTER_DAYS=7.
+    m_ = _age_msg(m_, read_min_ago=5 * 24 * 60)
+    m_ = _set_ping_count(m_, _con.PING_ESCALATE_THRESHOLD_DEFAULT + 1)
+    assert _con.classify_message(m_) == _con.MSG_VERDICT_STALE
+
+
+def test_msg_classify_urgent_ladder_not_yet_exhausted_stays_stale(
+    repo, tmp_paths,
+):
+    """Pre-condition: ladder must already have been exhausted
+    (ping_count strictly greater than threshold). At-or-below
+    threshold is still escalating and must NOT auto-archive — that
+    would skip the ping and orchestrator-escalation phases."""
+    m_ = _send_msg(tmp_paths, "!urgent")
+    days = _con.URGENT_LADDER_EXHAUSTED_ARCHIVE_AFTER_DAYS + 1
+    m_ = _age_msg(m_, read_min_ago=days * 24 * 60)
+    m_ = _set_ping_count(m_, _con.PING_ESCALATE_THRESHOLD_DEFAULT)
+    assert _con.classify_message(m_) == _con.MSG_VERDICT_STALE
+
+
 @pytest.mark.parametrize("label", sorted(_con.REQUIRED_ACTION_LABELS))
 def test_msg_classify_required_action_does_not_auto_archive(
     label, repo, tmp_paths,
