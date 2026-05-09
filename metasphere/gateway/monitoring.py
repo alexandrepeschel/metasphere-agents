@@ -33,7 +33,11 @@ from ..paths import Paths
 # ---------------------------------------------------------------------------
 
 ZOMBIE_THRESHOLD = 20
-TMUX_THRESHOLD = 10
+#: Slack on top of the persistent-agent baseline. The effective tmux
+#: threshold is ``persistent_agent_count(paths) + TMUX_EPHEMERAL_BUFFER``;
+#: a static cap is wrong once the harness routinely runs 7+ cron-driven
+#: persistent collaborators (the static-10 cap fires permanently).
+TMUX_EPHEMERAL_BUFFER = 5
 PID_HEADROOM_PCT_THRESHOLD = 20  # alert when free-slots pct drops below
 
 # Test hook: when set to a non-empty string of the form
@@ -219,6 +223,22 @@ def tmux_counters(paths: Paths) -> TmuxCounters:
     return TmuxCounters(total=total, persistent=persistent, ephemeral=ephemeral)
 
 
+def tmux_threshold(paths: Paths) -> int:
+    """Effective tmux session ALERT threshold.
+
+    Counts on-disk persistent agents (AgentRecord.is_persistent — same
+    semantics tmux_counters uses to classify live sessions) and adds
+    :data:`TMUX_EPHEMERAL_BUFFER`. Failures fall back to the buffer
+    alone so monitoring stays alive on a half-installed host.
+    """
+    try:
+        from metasphere.agents import list_agents
+        baseline = sum(1 for a in list_agents(paths) if a.is_persistent)
+    except Exception:
+        baseline = 0
+    return baseline + TMUX_EPHEMERAL_BUFFER
+
+
 # ---------------------------------------------------------------------------
 # PID headroom
 # ---------------------------------------------------------------------------
@@ -334,12 +354,21 @@ def _parse_override(raw: str) -> MonitoringSnapshot | None:
     )
 
 
-def evaluate_alert(snap: MonitoringSnapshot) -> str:
+def evaluate_alert(
+    snap: MonitoringSnapshot,
+    tmux_threshold: int = TMUX_EPHEMERAL_BUFFER,
+) -> str:
     """Return a single-line ALERT string when any threshold trips, else ''.
+
+    ``tmux_threshold`` is the effective ceiling for ``snap.tmux.total``;
+    callers that have a :class:`Paths` should compute it via
+    :func:`tmux_threshold` so it scales with the persistent-agent
+    baseline. The default is the bare ephemeral buffer (used by tests
+    that synthesise snapshots without paths).
 
     Conditions:
     - zombies.total > ZOMBIE_THRESHOLD
-    - tmux.total > TMUX_THRESHOLD
+    - tmux.total > tmux_threshold
     - pids.free_pct < PID_HEADROOM_PCT_THRESHOLD
     """
     trips: list[str] = []
@@ -348,11 +377,11 @@ def evaluate_alert(snap: MonitoringSnapshot) -> str:
             f"zombies={snap.zombies.total} "
             f"(npm_root_g={snap.zombies.npm_root_g}) > {ZOMBIE_THRESHOLD}"
         )
-    if snap.tmux.total > TMUX_THRESHOLD:
+    if snap.tmux.total > tmux_threshold:
         trips.append(
             f"tmux_sessions={snap.tmux.total} "
             f"(persistent={snap.tmux.persistent}, ephemeral={snap.tmux.ephemeral}) "
-            f"> {TMUX_THRESHOLD}"
+            f"> {tmux_threshold}"
         )
     if snap.pids.free_pct < PID_HEADROOM_PCT_THRESHOLD:
         trips.append(
@@ -381,4 +410,4 @@ def render_alert(paths: Paths) -> str:
             # alert" rather than letting a probe error blow up context
             # assembly.
             return ""
-    return evaluate_alert(snap)
+    return evaluate_alert(snap, tmux_threshold=tmux_threshold(paths))

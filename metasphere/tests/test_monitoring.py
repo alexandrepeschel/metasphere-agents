@@ -81,14 +81,72 @@ def test_multiple_thresholds_trip_together():
 
 
 def test_boundary_equal_to_threshold_does_not_trip():
-    """Guard: zombies == 20 (not >), tmux == 10 (not >),
+    """Guard: zombies == ZOMBIE_THRESHOLD (not >), tmux == buffer (not >),
     pid_pct == 20 (not <) must all be silent."""
     snap = _snap(
         z_total=mon.ZOMBIE_THRESHOLD,
-        t_total=mon.TMUX_THRESHOLD,
+        t_total=mon.TMUX_EPHEMERAL_BUFFER,
         pid_free_pct=float(mon.PID_HEADROOM_PCT_THRESHOLD),
     )
     assert mon.evaluate_alert(snap) == ""
+
+
+def test_tmux_threshold_scales_with_persistent_agents(tmp_paths: Paths):
+    """Threshold = persistent-agent count + ephemeral buffer.
+
+    Static-10 cap fired permanently once the harness routinely ran 7+
+    cron-driven persistent collaborators. Threshold must scale with
+    the on-disk MISSION.md / class=persistent baseline.
+    """
+    # Empty install: just the buffer.
+    assert mon.tmux_threshold(tmp_paths) == mon.TMUX_EPHEMERAL_BUFFER
+
+    # Three persistent agents (one global + two project-scoped).
+    (tmp_paths.agents / "@orchestrator").mkdir(parents=True, exist_ok=True)
+    (tmp_paths.agents / "@orchestrator" / "MISSION.md").write_text("orch")
+    p1 = tmp_paths.projects / "alpha" / "agents" / "@lead"
+    p1.mkdir(parents=True, exist_ok=True)
+    (p1 / "MISSION.md").write_text("alpha lead")
+    p2 = tmp_paths.projects / "beta" / "agents" / "@eng"
+    p2.mkdir(parents=True, exist_ok=True)
+    (p2 / "MISSION.md").write_text("beta eng")
+    # An ephemeral agent (no MISSION.md) must NOT bump the threshold.
+    (tmp_paths.agents / "@scratch").mkdir(parents=True, exist_ok=True)
+
+    assert mon.tmux_threshold(tmp_paths) == 3 + mon.TMUX_EPHEMERAL_BUFFER
+
+
+def test_tmux_threshold_class_sidecar_overrides_mission(tmp_paths: Paths):
+    """class=ephemeral sidecar must exclude an agent from the baseline
+    even when MISSION.md is present (mirrors AgentRecord semantics)."""
+    d = tmp_paths.agents / "@brand-mentions"
+    d.mkdir(parents=True, exist_ok=True)
+    (d / "MISSION.md").write_text("monitor")
+    (d / "class").write_text("ephemeral\n")
+    assert mon.tmux_threshold(tmp_paths) == mon.TMUX_EPHEMERAL_BUFFER
+
+
+def test_render_alert_uses_dynamic_tmux_threshold(monkeypatch, tmp_paths: Paths):
+    """Live tmux=12 must NOT trip when 10 persistent agents are on disk
+    (threshold = 10 + buffer = 15). Same count WOULD trip the legacy
+    static-10 cap — this is the regression the dynamic threshold fixes.
+    """
+    monkeypatch.delenv("METASPHERE_MONITORING_OVERRIDE", raising=False)
+    for i in range(10):
+        d = tmp_paths.agents / f"@persist{i}"
+        d.mkdir(parents=True, exist_ok=True)
+        (d / "MISSION.md").write_text("alive")
+    fake = _snap(t_total=12, t_pers=10, t_eph=2)
+    monkeypatch.setattr(mon, "snapshot", lambda paths: fake)
+    assert mon.render_alert(tmp_paths) == ""
+
+    # Push tmux past (baseline + buffer) and the alert fires.
+    fake_over = _snap(t_total=20, t_pers=10, t_eph=10)
+    monkeypatch.setattr(mon, "snapshot", lambda paths: fake_over)
+    out = mon.render_alert(tmp_paths)
+    assert out.startswith("## ALERT:")
+    assert "tmux_sessions=20" in out
+    assert f"> {10 + mon.TMUX_EPHEMERAL_BUFFER}" in out
 
 
 # ---------------------------------------------------------------------------
