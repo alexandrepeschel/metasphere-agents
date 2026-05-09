@@ -44,17 +44,29 @@ def _default_adapters() -> List[SurfaceAdapter]:
     return [TelegramAdapter(on_handler_error=_log_telegram_handler_error)]
 
 
-def _poll_once(timeout: int = 1) -> int:
-    """Drive every default adapter once; sum the inbound counts.
+def _poll_once(
+    timeout: int = 1,
+    *,
+    adapters: Optional[List[SurfaceAdapter]] = None,
+) -> int:
+    """Drive every adapter once; sum the inbound counts.
 
-    Kept as the default ``poll_fn`` so callers (and tests) that imported
-    ``gw_daemon._poll_once`` keep working. The actual polling lives on
-    each adapter; this wrapper exists only so the daemon's outer loop
-    can stay shaped as ``poll_fn()`` and so handler errors continue to
-    surface under ``@gateway``.
+    Single source of truth for the daemon's per-tick polling. The
+    daemon's outer loop binds its own adapter list (built once in
+    ``run_daemon``) into a ``poll_fn`` that calls this helper —
+    that way the same adapter instances drive every tick (matters
+    for any adapter that holds connection state).
+
+    ``adapters=None`` falls back to :func:`_default_adapters`. That
+    branch keeps the bare ``gw_daemon._poll_once(timeout=1)`` test
+    seam working for callers that don't care about instance identity
+    (the existing photo-routing tests, which monkeypatch the
+    poller/api layer underneath).
     """
+    if adapters is None:
+        adapters = _default_adapters()
     total = 0
-    for adapter in _default_adapters():
+    for adapter in adapters:
         total += adapter.receive(timeout=timeout)
     return total
 
@@ -105,20 +117,18 @@ def run_daemon(
     """
     paths = paths or resolve()
     if poll_fn is None:
-        # Build a poll_fn that drives every registered SurfaceAdapter once
-        # per tick. ``adapters`` lets a caller (CLI, future config) register
-        # additional surfaces alongside telegram; ``None`` falls back to the
-        # default list (telegram only, today). Test callers that pass
-        # ``poll_fn`` directly skip this branch entirely.
+        # Build the adapter list ONCE here (not per tick) so any adapter
+        # holding connection / session state keeps it across iterations.
+        # ``adapters`` lets a caller (CLI, future config) register additional
+        # surfaces alongside telegram; ``None`` falls back to the default
+        # list (telegram only, today). Test callers that pass ``poll_fn``
+        # directly skip this branch entirely.
         adapter_list: List[SurfaceAdapter] = (
             adapters if adapters is not None else _default_adapters()
         )
 
         def poll_fn() -> int:
-            total = 0
-            for adapter in adapter_list:
-                total += adapter.receive()
-            return total
+            return _poll_once(adapters=adapter_list)
     sleep_fn = sleep_fn or time.sleep
     time_fn = time_fn or time.time
     if reap_dormant_fn is None:
