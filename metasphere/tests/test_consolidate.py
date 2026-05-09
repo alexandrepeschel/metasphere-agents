@@ -824,35 +824,63 @@ def test_msg_classify_reply_read_recent_is_active(repo, tmp_paths):
     assert _con.classify_message(m_) == _con.MSG_VERDICT_ACTIVE
 
 
-@pytest.mark.parametrize("label", sorted(_con.TERMINAL_INFO_LABELS))
-def test_msg_classify_terminal_info_auto_archive(label, repo, tmp_paths):
-    """Ad-hoc notification labels (!ack, !vet-result, !standby, ...) read
-    more than TERMINAL_INFO_ARCHIVE_AFTER_DAYS ago must auto-archive.
-    Without this, they fell through to STALE forever and noop-pinged
-    on every consolidate tick (witnessed 2026-05-09: 11 messages with
-    ping_count 100-680 each).
+# Generic read-and-silent auto-archive (opt-out). Sample arbitrary
+# ad-hoc labels — the rule is "not in REQUIRED_ACTION_LABELS", so the
+# specific token shouldn't matter.
+@pytest.mark.parametrize("label", [
+    "!ack", "!vet-result", "!standby", "!poller-conflict-leak-surface-update",
+    "!critic-clear", "!alert", "!completely-novel-label",
+])
+def test_msg_classify_read_silent_auto_archives(label, repo, tmp_paths):
+    """Any non-required-action label, read for READ_ARCHIVE_AFTER_DAYS
+    with no reply/completion, auto-archives. Replaces the explicit
+    TERMINAL_INFO_LABELS frozenset with an opt-out: silence after 3
+    days = done. Witnessed 2026-05-09: !ack/!vet-result/!standby
+    cycled STALE forever, then !critic-clear/!alert/!poller-conflict-*
+    showed up the next tick — an enumerated allowlist always lags.
     """
     m_ = _send_msg(tmp_paths, label)
-    days = _con.TERMINAL_INFO_ARCHIVE_AFTER_DAYS + 1
+    days = _con.READ_ARCHIVE_AFTER_DAYS + 1
     m_ = _age_msg(m_, read_min_ago=days * 24 * 60)
     assert _con.classify_message(m_) == _con.MSG_VERDICT_INFO_AUTO_ARCHIVE
 
 
-def test_msg_classify_terminal_info_within_grace_holds_active(repo, tmp_paths):
-    """Inside the 3-day grace, TERMINAL_INFO_LABELS skip the STALE ping
-    ladder (else they generate ~280 noop-pinged events before the
-    archive window catches them). Verdict must be ACTIVE — not STALE."""
+def test_msg_classify_read_silent_within_grace_holds_active(repo, tmp_paths):
+    """Inside the 3-day grace, non-required-action labels skip the
+    STALE ping ladder. Verdict must be ACTIVE — not STALE — else we
+    emit ~280 noop-pinged events per message before the archive
+    window catches them."""
     m_ = _send_msg(tmp_paths, "!ack")
     # 1 day in: well past the 15-min STALE window, well before the
-    # 3-day terminal-info archive window.
+    # 3-day archive window.
     m_ = _age_msg(m_, read_min_ago=24 * 60)
     assert _con.classify_message(m_) == _con.MSG_VERDICT_ACTIVE
 
 
-def test_msg_classify_terminal_info_recent_is_active(repo, tmp_paths):
+def test_msg_classify_read_recent_ad_hoc_is_active(repo, tmp_paths):
     m_ = _send_msg(tmp_paths, "!vet-result")
     m_ = _age_msg(m_, read_min_ago=5)
     assert _con.classify_message(m_) == _con.MSG_VERDICT_ACTIVE
+
+
+@pytest.mark.parametrize("label", sorted(_con.REQUIRED_ACTION_LABELS))
+def test_msg_classify_required_action_does_not_auto_archive(
+    label, repo, tmp_paths,
+):
+    """Required-action labels (!task, !query, !urgent) NEVER hit the
+    generic 3-day auto-archive — silence on these is exactly what the
+    ping ladder is for. !task and !query short-circuit to PINNED;
+    !urgent reaches STALE and pings. None should ever return
+    INFO_AUTO_ARCHIVE on a read+4d message with no reply/completion.
+    """
+    m_ = _send_msg(tmp_paths, label)
+    days = _con.READ_ARCHIVE_AFTER_DAYS + 1
+    m_ = _age_msg(m_, read_min_ago=days * 24 * 60)
+    verdict = _con.classify_message(m_)
+    assert verdict != _con.MSG_VERDICT_INFO_AUTO_ARCHIVE, (
+        f"required-action label {label} must not auto-archive on silence; "
+        f"got {verdict}"
+    )
 
 
 def test_msg_classify_done_auto_archive(repo, tmp_paths):

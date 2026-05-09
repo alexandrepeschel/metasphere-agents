@@ -102,26 +102,23 @@ MSG_VERDICTS = (
 # this long. They're just notifications; nothing acts on them.
 INFO_AUTO_ARCHIVE_AFTER_MINUTES = 60
 
-#: Ad-hoc informational labels that callers invent for thread closure
-#: (acknowledgements, vet results, standby pings, surface-update
-#: notifications, ...). They are notification-shaped — no reply
-#: expected — but aren't in the standard ``{!info, !reply}`` set, so
-#: they fell through to STALE forever and noop-pinged on every
-#: consolidate fire (witnessed 2026-05-09: 11 messages with ping_count
-#: 100-680 each, dominating the events log). A longer grace than the
-#: 60-min ``!info`` window keeps the door open for action on a label
-#: we don't recognise, while still terminating the loop.
-TERMINAL_INFO_LABELS = frozenset({
-    "!ack",
-    "!vet-result",
-    "!standby",
-    "!poller-conflict-leak-surface-update",
-})
+#: Labels that REQUIRE an explicit response — reply, completion, or
+#: ping ladder. Everything else is treated as notification-shaped and
+#: auto-archived after :data:`READ_ARCHIVE_AFTER_DAYS` of silence.
+#: Opt-out beats opt-in: the harness invents ad-hoc labels constantly
+#: (!ack, !vet-result, !standby, !critic-clear, !poller-conflict-*,
+#: ...) and an enumerated allowlist always lags reality. !task and
+#: !query also live in :data:`metasphere.messages.PINNED_LABELS` and
+#: short-circuit to PINNED earlier; they're listed here too so the
+#: rule reads correctly in isolation. !urgent is the only label that
+#: is required-action but not pinned — it reaches the STALE branch
+#: and ping-ladders normally.
+REQUIRED_ACTION_LABELS = frozenset({"!task", "!query", "!urgent"})
 
-#: Auto-archive window for :data:`TERMINAL_INFO_LABELS`. Days, not
-#: minutes — these labels are ad-hoc and we don't want to pre-empt a
-#: recipient who genuinely intends to act on one.
-TERMINAL_INFO_ARCHIVE_AFTER_DAYS = 3
+#: Generic read-and-silent auto-archive window. Days, not minutes —
+#: a sender of a non-required-action message has 3 days to either
+#: reply, complete it, or upgrade the label.
+READ_ARCHIVE_AFTER_DAYS = 3
 
 # Built-in system agents that are virtual — no agent_dir on disk
 # anywhere — and therefore have no human/REPL reader behind them.
@@ -837,9 +834,13 @@ def classify_message(
     6. ``status == REPLIED`` aged past stale_window → INFO_AUTO_ARCHIVE.
     7. ``label`` in ``{!info, !reply}`` aged past info_window →
        INFO_AUTO_ARCHIVE.
-    8. Read for stale_window without action: STALE (with no-reader
-       short-circuit to INFO_AUTO_ARCHIVE).
-    9. Otherwise → ACTIVE.
+    8. ``label`` not in :data:`REQUIRED_ACTION_LABELS`, read +
+       :data:`READ_ARCHIVE_AFTER_DAYS` ago, no reply / completion →
+       INFO_AUTO_ARCHIVE (generic catch-all for ad-hoc labels).
+    9. Read for stale_window without action: STALE (with no-reader
+       short-circuit to INFO_AUTO_ARCHIVE; non-required-action labels
+       skip the ping ladder, the 3-day archive catches them).
+    10. Otherwise → ACTIVE.
     """
     now = now or _utcnow()
     window = _dt.timedelta(minutes=stale_window_minutes)
@@ -960,22 +961,25 @@ def classify_message(
         if (now - read_at) >= info_window and not msg.completed_at:
             return MSG_VERDICT_INFO_AUTO_ARCHIVE
 
-    # TERMINAL-INFO-AUTO-ARCHIVE: ad-hoc notification labels
-    # (:data:`TERMINAL_INFO_LABELS`) read > N days ago with no reply
-    # or completion. Mirrors the !info/!reply path with a longer
-    # grace — these labels are caller-invented and we don't want to
-    # archive ahead of someone who plans to act. The 2026-05-09 event
-    # log shows 11 such messages noop-pinging on every consolidate
-    # tick (ping_count 100-680) before this rule landed.
+    # READ-AND-SILENT-AUTO-ARCHIVE: generic catch-all. Any read
+    # message that has gone READ_ARCHIVE_AFTER_DAYS without reply,
+    # completion, or escalation auto-archives — UNLESS its label is
+    # in :data:`REQUIRED_ACTION_LABELS` (the only labels for which
+    # silence is itself a problem worth escalating). Replaces the
+    # ad-hoc TERMINAL_INFO_LABELS opt-in: an enumerated allowlist
+    # always lags the labels callers invent (witnessed 2026-05-09:
+    # !ack/!vet-result/!standby cycled STALE forever, then a fresh
+    # round of !critic-clear/!alert/!poller-conflict-final showed up
+    # the next tick).
     if (
-        msg.label in TERMINAL_INFO_LABELS
-        and msg.status == _messages.STATUS_READ
+        msg.status == _messages.STATUS_READ
         and read_at
         and not msg.completed_at
         and not msg.replied_at
+        and msg.label not in REQUIRED_ACTION_LABELS
     ):
-        terminal_window = _dt.timedelta(days=TERMINAL_INFO_ARCHIVE_AFTER_DAYS)
-        if (now - read_at) >= terminal_window:
+        archive_window = _dt.timedelta(days=READ_ARCHIVE_AFTER_DAYS)
+        if (now - read_at) >= archive_window:
             return MSG_VERDICT_INFO_AUTO_ARCHIVE
 
     # (``!done`` terminal check moved above the STATUS_UNREAD branch
@@ -1001,14 +1005,15 @@ def classify_message(
         # of which got pinged at +15/+30/+45min before being archived
         # at +60min). Skip the ping ladder for these labels — the
         # auto-archive will catch them.
-        if msg.label in {"!info", "!reply"}:
-            return MSG_VERDICT_ACTIVE
-        # Same skip for TERMINAL_INFO_LABELS: their auto-archive
-        # window is 3 days, but the STALE window is 15 minutes — the
-        # gap was generating ~280 noop-pinged-out events per message
-        # (witnessed 2026-05-09). Hold ACTIVE until the archive window
-        # catches them.
-        if msg.label in TERMINAL_INFO_LABELS:
+        # Only labels in REQUIRED_ACTION_LABELS reach the ping ladder.
+        # !info/!reply and every other notification-shaped label
+        # (!ack, !vet-result, !standby, !critic-clear, ad-hoc project
+        # labels, ...) hold ACTIVE until the 3-day generic
+        # read-and-silent archive above catches them. Without this,
+        # the gap between the 15-min STALE window and the 3-day
+        # archive emits ~280 noop-pinged events per message
+        # (witnessed 2026-05-09).
+        if msg.label not in REQUIRED_ACTION_LABELS:
             return MSG_VERDICT_ACTIVE
         # If the recipient has no reader (built-in system agent or
         # GC'd ephemeral), pinging just spawns another no-reader
