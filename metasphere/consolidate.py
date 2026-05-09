@@ -102,6 +102,27 @@ MSG_VERDICTS = (
 # this long. They're just notifications; nothing acts on them.
 INFO_AUTO_ARCHIVE_AFTER_MINUTES = 60
 
+#: Ad-hoc informational labels that callers invent for thread closure
+#: (acknowledgements, vet results, standby pings, surface-update
+#: notifications, ...). They are notification-shaped — no reply
+#: expected — but aren't in the standard ``{!info, !reply}`` set, so
+#: they fell through to STALE forever and noop-pinged on every
+#: consolidate fire (witnessed 2026-05-09: 11 messages with ping_count
+#: 100-680 each, dominating the events log). A longer grace than the
+#: 60-min ``!info`` window keeps the door open for action on a label
+#: we don't recognise, while still terminating the loop.
+TERMINAL_INFO_LABELS = frozenset({
+    "!ack",
+    "!vet-result",
+    "!standby",
+    "!poller-conflict-leak-surface-update",
+})
+
+#: Auto-archive window for :data:`TERMINAL_INFO_LABELS`. Days, not
+#: minutes — these labels are ad-hoc and we don't want to pre-empt a
+#: recipient who genuinely intends to act on one.
+TERMINAL_INFO_ARCHIVE_AFTER_DAYS = 3
+
 # Built-in system agents that are virtual — no agent_dir on disk
 # anywhere — and therefore have no human/REPL reader behind them.
 # Used as a fast-path for `_is_no_reader` and as a fallback when no
@@ -939,6 +960,24 @@ def classify_message(
         if (now - read_at) >= info_window and not msg.completed_at:
             return MSG_VERDICT_INFO_AUTO_ARCHIVE
 
+    # TERMINAL-INFO-AUTO-ARCHIVE: ad-hoc notification labels
+    # (:data:`TERMINAL_INFO_LABELS`) read > N days ago with no reply
+    # or completion. Mirrors the !info/!reply path with a longer
+    # grace — these labels are caller-invented and we don't want to
+    # archive ahead of someone who plans to act. The 2026-05-09 event
+    # log shows 11 such messages noop-pinging on every consolidate
+    # tick (ping_count 100-680) before this rule landed.
+    if (
+        msg.label in TERMINAL_INFO_LABELS
+        and msg.status == _messages.STATUS_READ
+        and read_at
+        and not msg.completed_at
+        and not msg.replied_at
+    ):
+        terminal_window = _dt.timedelta(days=TERMINAL_INFO_ARCHIVE_AFTER_DAYS)
+        if (now - read_at) >= terminal_window:
+            return MSG_VERDICT_INFO_AUTO_ARCHIVE
+
     # (``!done`` terminal check moved above the STATUS_UNREAD branch
     #  so unread !dones still terminate — see the block there.)
 
@@ -963,6 +1002,13 @@ def classify_message(
         # at +60min). Skip the ping ladder for these labels — the
         # auto-archive will catch them.
         if msg.label in {"!info", "!reply"}:
+            return MSG_VERDICT_ACTIVE
+        # Same skip for TERMINAL_INFO_LABELS: their auto-archive
+        # window is 3 days, but the STALE window is 15 minutes — the
+        # gap was generating ~280 noop-pinged-out events per message
+        # (witnessed 2026-05-09). Hold ACTIVE until the archive window
+        # catches them.
+        if msg.label in TERMINAL_INFO_LABELS:
             return MSG_VERDICT_ACTIVE
         # If the recipient has no reader (built-in system agent or
         # GC'd ephemeral), pinging just spawns another no-reader

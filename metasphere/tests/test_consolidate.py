@@ -824,6 +824,37 @@ def test_msg_classify_reply_read_recent_is_active(repo, tmp_paths):
     assert _con.classify_message(m_) == _con.MSG_VERDICT_ACTIVE
 
 
+@pytest.mark.parametrize("label", sorted(_con.TERMINAL_INFO_LABELS))
+def test_msg_classify_terminal_info_auto_archive(label, repo, tmp_paths):
+    """Ad-hoc notification labels (!ack, !vet-result, !standby, ...) read
+    more than TERMINAL_INFO_ARCHIVE_AFTER_DAYS ago must auto-archive.
+    Without this, they fell through to STALE forever and noop-pinged
+    on every consolidate tick (witnessed 2026-05-09: 11 messages with
+    ping_count 100-680 each).
+    """
+    m_ = _send_msg(tmp_paths, label)
+    days = _con.TERMINAL_INFO_ARCHIVE_AFTER_DAYS + 1
+    m_ = _age_msg(m_, read_min_ago=days * 24 * 60)
+    assert _con.classify_message(m_) == _con.MSG_VERDICT_INFO_AUTO_ARCHIVE
+
+
+def test_msg_classify_terminal_info_within_grace_holds_active(repo, tmp_paths):
+    """Inside the 3-day grace, TERMINAL_INFO_LABELS skip the STALE ping
+    ladder (else they generate ~280 noop-pinged events before the
+    archive window catches them). Verdict must be ACTIVE — not STALE."""
+    m_ = _send_msg(tmp_paths, "!ack")
+    # 1 day in: well past the 15-min STALE window, well before the
+    # 3-day terminal-info archive window.
+    m_ = _age_msg(m_, read_min_ago=24 * 60)
+    assert _con.classify_message(m_) == _con.MSG_VERDICT_ACTIVE
+
+
+def test_msg_classify_terminal_info_recent_is_active(repo, tmp_paths):
+    m_ = _send_msg(tmp_paths, "!vet-result")
+    m_ = _age_msg(m_, read_min_ago=5)
+    assert _con.classify_message(m_) == _con.MSG_VERDICT_ACTIVE
+
+
 def test_msg_classify_done_auto_archive(repo, tmp_paths):
     """``!done`` notifications: terminal once aged past the auto-archive
     window regardless of read status. Previously required STATUS_READ +
