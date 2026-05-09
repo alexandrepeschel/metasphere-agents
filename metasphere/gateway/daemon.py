@@ -10,35 +10,53 @@ failure cannot exit the process.
 from __future__ import annotations
 
 import time
-from typing import Callable, Optional
+from typing import Callable, List, Optional
 
 from ..events import log_event
 from ..paths import Paths, resolve
-from ..telegram import poller
+from .adapter import SurfaceAdapter
+from .adapters.telegram import TelegramAdapter
 from .session import ensure_session, write_harness_hash_baseline
 from .watchdog import run_watchdog
 
 
-def _poll_once(timeout: int = 1) -> int:
-    """Thin wrapper over ``poller.run_poll_iteration``.
+def _log_telegram_handler_error(u, exc) -> None:
+    """Log a per-update handler failure to the ``@gateway`` event stream.
 
-    The poll loop itself (getUpdates → dispatch → save offset) lives in
-    ``telegram.poller.run_poll_iteration``. This wrapper exists only to
-    log handler errors to the event stream under the ``@gateway`` agent
-    — pure bookkeeping. If you need to change polling behavior, change
-    it in the poller module.
+    Best-effort; never raises. Wired into :class:`TelegramAdapter` so the
+    poller's ``on_error`` hook keeps emitting ``telegram.handle_error``
+    events exactly as it did before the adapter refactor.
     """
-    def _log_handler_error(u, exc):
-        try:
-            log_event(
-                "telegram.handle_error",
-                f"handle_update raised for update {u.update_id}: {exc}",
-                agent="@gateway",
-            )
-        except Exception:
-            pass
+    try:
+        log_event(
+            "telegram.handle_error",
+            f"handle_update raised for update {u.update_id}: {exc}",
+            agent="@gateway",
+        )
+    except Exception:
+        pass
 
-    return poller.run_poll_iteration(timeout=timeout, on_error=_log_handler_error)
+
+def _default_adapters() -> List[SurfaceAdapter]:
+    """Adapters wired by default when ``run_daemon`` is called without an
+    explicit list. Today: telegram only — additional surfaces register
+    here as they land."""
+    return [TelegramAdapter(on_handler_error=_log_telegram_handler_error)]
+
+
+def _poll_once(timeout: int = 1) -> int:
+    """Drive every default adapter once; sum the inbound counts.
+
+    Kept as the default ``poll_fn`` so callers (and tests) that imported
+    ``gw_daemon._poll_once`` keep working. The actual polling lives on
+    each adapter; this wrapper exists only so the daemon's outer loop
+    can stay shaped as ``poll_fn()`` and so handler errors continue to
+    surface under ``@gateway``.
+    """
+    total = 0
+    for adapter in _default_adapters():
+        total += adapter.receive(timeout=timeout)
+    return total
 
 
 def run_daemon(
@@ -48,6 +66,7 @@ def run_daemon(
     dormancy_interval: float = 300.0,
     dormancy_max_idle_seconds: int = 86400,
     *,
+    adapters: Optional[List[SurfaceAdapter]] = None,
     stop: Optional[Callable[[], bool]] = None,
     poll_fn: Optional[Callable[[], int]] = None,
     sleep_fn: Optional[Callable[[float], None]] = None,
@@ -58,6 +77,13 @@ def run_daemon(
     ephemeral_idle_max_seconds: int = 1800,
 ) -> None:
     """Run the gateway daemon forever.
+
+    ``adapters`` is the list of :class:`SurfaceAdapter` instances driven
+    on each poll tick. ``None`` falls back to :func:`_default_adapters`
+    (telegram only today). Pass an explicit list to register additional
+    surfaces (web chat, email, webhook, …) alongside or instead of
+    telegram. Ignored when ``poll_fn`` is also supplied — that path is
+    the test seam.
 
     The injection points (``poll_fn``, ``sleep_fn``, ``time_fn``,
     ``stop``, ``reap_dormant_fn``, ``reap_crashed_fn``,
@@ -78,7 +104,21 @@ def run_daemon(
     sitting at a shell prompt (default 30 min).
     """
     paths = paths or resolve()
-    poll_fn = poll_fn or _poll_once
+    if poll_fn is None:
+        # Build a poll_fn that drives every registered SurfaceAdapter once
+        # per tick. ``adapters`` lets a caller (CLI, future config) register
+        # additional surfaces alongside telegram; ``None`` falls back to the
+        # default list (telegram only, today). Test callers that pass
+        # ``poll_fn`` directly skip this branch entirely.
+        adapter_list: List[SurfaceAdapter] = (
+            adapters if adapters is not None else _default_adapters()
+        )
+
+        def poll_fn() -> int:
+            total = 0
+            for adapter in adapter_list:
+                total += adapter.receive()
+            return total
     sleep_fn = sleep_fn or time.sleep
     time_fn = time_fn or time.time
     if reap_dormant_fn is None:
