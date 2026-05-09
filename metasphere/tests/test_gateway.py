@@ -32,6 +32,29 @@ def test_session_health_alive_with_idle(tmp_paths: Paths):
     assert idle >= 0
 
 
+def test_session_health_prefers_orchestrator_sidecar(tmp_paths: Paths):
+    """When @orchestrator/last_active exists, idle is computed from it
+    instead of tmux ``session_activity`` — the latter only advances on
+    keystrokes and lies about a busy unattended REPL.
+    """
+    import datetime as _dt
+
+    orch = tmp_paths.agents / "@orchestrator"
+    orch.mkdir(parents=True, exist_ok=True)
+    stamp = _dt.datetime.now(_dt.timezone.utc) - _dt.timedelta(seconds=42)
+    (orch / "last_active").write_text(
+        stamp.isoformat().replace("+00:00", "Z") + "\n", encoding="utf-8"
+    )
+    # tmux mock returns a much-older activity timestamp; sidecar should win.
+    disp = MagicMock(returncode=0, stdout="0\n", stderr="")
+    with patch.object(gw_session, "_agents_session_alive", return_value=True), \
+         patch.object(gw_session, "_tmux", return_value=disp) as mock_tmux:
+        alive, idle = gw_session.session_health(tmp_paths)
+    assert alive is True
+    assert 40 <= idle <= 60  # ~42s, allow scheduler slack
+    mock_tmux.assert_not_called()
+
+
 # ---------------------------------------------------------------------------
 # ensure_session / start_session
 # ---------------------------------------------------------------------------

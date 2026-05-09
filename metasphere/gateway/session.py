@@ -15,7 +15,10 @@ import time
 from pathlib import Path
 from typing import Tuple
 
-from ..agents import session_alive as _agents_session_alive
+from ..agents import (
+    _last_active_idle_seconds as _orchestrator_sidecar_idle,
+    session_alive as _agents_session_alive,
+)
 from ..context import harness_hash
 from ..events import log_event
 from ..io import atomic_write_text
@@ -146,7 +149,17 @@ def session_alive(name: str = SESSION_NAME) -> bool:
 
 
 def session_health(paths: Paths | None = None) -> Tuple[bool, int]:
-    """Return ``(alive, idle_seconds_since_session_activity)``.
+    """Return ``(alive, idle_seconds)``.
+
+    Idle is read from the @orchestrator agent's ``last_active`` sidecar
+    file when present (refreshed by every hook signal the REPL
+    processes — UserPromptSubmit, Stop, telegram-inject, heartbeat-tick),
+    and falls back to tmux ``session_activity`` only when the sidecar is
+    missing. The tmux signal advances on keystrokes only, so unattended
+    sessions that are processing pasted prompts read as "idle" forever
+    in the keystroke view — the sidecar fixes that for ``metasphere
+    status`` and the gateway CLI's reported idle. Matches the signal
+    ``reap_dormant`` already uses.
 
     ``idle_seconds`` is 0 when the session is dead or activity cannot be
     parsed (an unparseable activity is treated as "fine" — the watchdog
@@ -154,6 +167,10 @@ def session_health(paths: Paths | None = None) -> Tuple[bool, int]:
     """
     if not session_alive(SESSION_NAME):
         return (False, 0)
+    paths = paths or resolve()
+    sidecar = _orchestrator_sidecar_idle(paths.agents / "@orchestrator")
+    if sidecar is not None:
+        return (True, sidecar)
     r = _tmux("display-message", "-t", SESSION_NAME, "-p", "#{session_activity}")
     if r.returncode != 0 or not r.stdout.strip():
         return (True, 0)

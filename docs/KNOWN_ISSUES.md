@@ -58,9 +58,10 @@ the line — history is signal). Newest at top of each section.
 - [x] **Memory maintenance not encoded in CLAUDE.md** — there's no explicit protocol telling the orchestrator when to prune `LEARNINGS.md`, rotate `HEARTBEAT.md`, summarize old daily logs, etc.
       Fix: "Memory Hygiene" section landed in CLAUDE.md with a file/cadence/action table covering LEARNINGS, HEARTBEAT, MISSION, SOUL/IDENTITY, daily logs.
 
-- [ ] **Daemon status accuracy** — `metasphere status` reports stale/wrong session state.
+- [x] **Daemon status accuracy** — `metasphere status` reports stale/wrong session state.
       Related task: `fix-metasphere-daemon-status-accuracy-20260406`
-      Progress (@explorer 2026-04-24): one case resolved — `Tasks: (unavailable)` was a silent TypeError in `status.py:26` (call to `list_tasks(project_root)` missing the `scope` arg, masked by `except Exception`). Fixed, regression test in `tests/test_status.py`. Full suite pass. Session-state accuracy is the remaining original symptom — still open.
+      Progress (@explorer 2026-04-24): one case resolved — `Tasks: (unavailable)` was a silent TypeError in `status.py:26` (call to `list_tasks(project_root)` missing the `scope` arg, masked by `except Exception`). Fixed, regression test in `tests/test_status.py`. Full suite pass.
+      Resolved (@explorer 2026-05-09): orchestrator-idle accuracy was the remaining symptom. `gateway.session.session_health` was reading tmux `session_activity`, which only advances on keystrokes — so an unattended REPL processing pasted prompts read as idle for hours. Live example: `idle 131040s` (~36h) while the orchestrator's `last_active` sidecar was 2h fresh. Fix: `session_health` now prefers the `<paths.agents>/@orchestrator/last_active` sidecar (refreshed by every hook signal — UserPromptSubmit, Stop, telegram-inject, heartbeat-tick), falling back to tmux `session_activity` only when the sidecar is missing. Matches the signal `reap_dormant` already uses. Coverage: `test_session_health_prefers_orchestrator_sidecar` in `test_gateway.py`. Live verify: idle dropped from 131040s → 66s post-fix, advancing in step with heartbeat ticks instead of keystrokes.
 
 - [x] **Task slug sanitization** — slashes in titles produce broken slugs/paths.
       Fix: `tasks.slugify()` replaces `/` with `-` and strips punctuation; covered by `test_slugify_replaces_slashes`. Live tasks dir has no nested-dir leaks as of 2026-04-24.
