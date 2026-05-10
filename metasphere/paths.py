@@ -151,6 +151,24 @@ class Paths:
         """Agent directory root for a specific project."""
         return self.projects / project_name / "agents"
 
+    @property
+    def project_shared_dir(self) -> Path | None:
+        """Shared cross-agent artifacts dir for the project enclosing ``self.scope``.
+
+        Returns ``~/.metasphere/projects/<project_name>/shared/`` and creates
+        it on access, so any agent in the project can read or write here.
+        Returns ``None`` when ``self.scope`` is not inside a registered
+        project (root-scope agents stay siloed under their own dirs).
+        """
+        # Local import: ``project`` imports ``paths`` at module scope.
+        from .project import project_for_scope
+        proj = project_for_scope(self.scope, paths=self)
+        if proj is None:
+            return None
+        d = self.projects / proj.name / "shared"
+        d.mkdir(parents=True, exist_ok=True)
+        return d
+
     def project_agent_dir(self, project_name: str, agent_id: str) -> Path:
         """Agent identity directory scoped to a project."""
         if not agent_id.startswith("@"):

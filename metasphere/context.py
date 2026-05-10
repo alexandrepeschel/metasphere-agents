@@ -515,6 +515,21 @@ def _render_project(paths: Paths) -> str:
         ts_part = f" ({commit_ts[:16]})" if commit_ts else ""
         activity += f", last commit: {last_commit}{ts_part}"
     out.append(f"Recent: {activity}")
+
+    # Shared artifacts: list top-level files (max 10) so agents see what
+    # teammates have dropped in the cross-agent dir without having to ls.
+    shared_dir = paths.projects / proj.name / "shared"
+    if shared_dir.is_dir():
+        try:
+            entries = sorted(p.name for p in shared_dir.iterdir() if p.is_file())
+        except OSError:
+            entries = []
+        if entries:
+            shown = ", ".join(entries[:10])
+            more = f" (+{len(entries) - 10} more)" if len(entries) > 10 else ""
+            out.append(f"Shared: {shared_dir} — {shown}{more}")
+        else:
+            out.append(f"Shared: {shared_dir} (empty)")
     return "\n".join(out) + "\n"
 
 

@@ -62,3 +62,23 @@ def test_find_agent_dir_normalizes_missing_at_prefix(tmp_paths):
     d.mkdir(parents=True)
     # Caller passes the agent id without the leading "@"
     assert tmp_paths.find_agent_dir("bare") == d
+
+
+def test_project_shared_dir_returns_none_outside_project(tmp_paths, monkeypatch):
+    # Point scope at a dir outside any project marker — property must
+    # return None so root-scope agents stay siloed.
+    outside = tmp_paths.root.parent / "outside"
+    outside.mkdir(parents=True, exist_ok=True)
+    bare = P.Paths(root=tmp_paths.root, project_root=outside, scope=outside)
+    assert bare.project_shared_dir is None
+
+
+def test_project_shared_dir_creates_and_returns_path(tmp_paths):
+    # tmp_paths registers the repo as project "testproj"; mark it with
+    # the in-repo .metasphere/ flag so project_for_scope walks find it.
+    (tmp_paths.scope / ".metasphere").mkdir(parents=True, exist_ok=True)
+    expected = tmp_paths.root / "projects" / "testproj" / "shared"
+    assert not expected.exists()
+    got = tmp_paths.project_shared_dir
+    assert got == expected
+    assert got.is_dir()

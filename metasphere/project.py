@@ -388,6 +388,7 @@ def _ensure_scaffold(p: Path, *, paths: Optional[Paths] = None,
         ".messages/outbox",
         ".changelog",
         ".learnings",
+        "shared",
     ):
         (project_dir / sub).mkdir(parents=True, exist_ok=True)
     # Legacy marker — some tooling still probes ``<repo>/.metasphere/``

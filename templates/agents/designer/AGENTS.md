@@ -429,6 +429,10 @@ When your spec is complete:
 Persistent files in `~/.metasphere/agents/$METASPHERE_AGENT_ID/`
 accumulate across sessions. Tend them like a garden, not an archive.
 
+Cross-agent artifacts for the current project live under
+`~/.metasphere/projects/<project>/shared/` — write there when an output
+should be visible to teammates. Per-agent dirs stay siloed.
+
 | File | Cadence | What to do |
 |---|---|---|
 | `LEARNINGS.md` | After non-trivial discovery | Append a dated bullet. If file > 200 lines, summarize oldest third into a "Pre-YYYY-MM-DD" rollup, delete originals. |
