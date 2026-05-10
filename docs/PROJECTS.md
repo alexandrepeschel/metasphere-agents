@@ -1,6 +1,6 @@
 # Projects + persistent agent groups — design
 
-> Status: design proposal, not yet implemented. Discussion ahead of @project-impl spawn.
+> Status: shipped 2026-04-08; this document is preserved for design rationale.
 
 ## What exists today
 
@@ -165,7 +165,7 @@ Walks upward from `METASPHERE_SCOPE` looking for `.metasphere/project.json`, des
 
 This gives every agent that operates inside a project (orchestrator AND any spawned children whose scope is inside the project tree) implicit knowledge of which project they're in and who their teammates are.
 
-## Open design questions for the operator
+## Design rationale (resolved as)
 
 1. **Member roles**: should the role be free-form text, or should we have a small enum (`lead | developer | reviewer | researcher | contributor`)? Free-form is easier; an enum lets us key behaviors off it later (e.g. only `lead` can close milestones).
 2. **Cross-project membership**: can `@reviewer-quality` be a persistent member of multiple projects at once? I assume yes (one tmux session, multiple project bindings) — confirm.

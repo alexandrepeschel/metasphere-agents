@@ -3,7 +3,8 @@
 Host-level operational procedures for the metasphere harness.
 Everything in this file is reproducible on any `systemd --user`-
 capable host. Commands assume the repo is checked out at
-`~/projects/metasphere-agents/`.
+`<metasphere-agents repo root>`. Find it with:
+`pip show metasphere | grep Location`.
 
 ## Reaper: `npm root -g` zombies
 
@@ -22,7 +23,7 @@ exceeds 60s.
 ### Install
 
 ```bash
-cd ~/projects/metasphere-agents
+cd <metasphere-agents repo root>
 mkdir -p ~/.config/systemd/user
 cp systemd/user/metasphere-reaper.service ~/.config/systemd/user/
 cp systemd/user/metasphere-reaper.timer   ~/.config/systemd/user/

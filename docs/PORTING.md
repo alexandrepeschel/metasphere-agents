@@ -1,5 +1,11 @@
 # Porting Audit — Metasphere CLI → Python
 
+> **Historical document.** As of 2026-04-14 the Python rewrite is
+> complete. This audit is preserved for design rationale; the bash
+> scripts described here no longer exist. See
+> [`CLI_PORTING_STATUS.md`](./CLI_PORTING_STATUS.md) for the current
+> snapshot.
+
 Audit for Python rewrite. Generated 2026-04-07 by @cli-doc-writer.
 
 Scope: 23 executable scripts under `scripts/` (excluding `*.bak`, `.gitkeep`, README.md). Goal: enumerate functions, flag fragility, identify cross-script invariants the rewrite MUST preserve, and rank porting priorities.

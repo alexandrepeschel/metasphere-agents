@@ -44,20 +44,21 @@ metasphere update --register-job
 
 ## What runs on each tick
 
-The cron job dispatches `metasphere update --quiet`, which:
+The cron job dispatches `metasphere update --quiet`, which calls
+`metasphere.update.run_update`:
 
 1. Records `git rev-parse HEAD` (the "from" hash).
-2. Calls `bash scripts/metasphere update` — owns the `git pull --ff-only`
-   (with `reset --hard origin/main` fallback), the symlink/copy of scripts
-   into `~/.metasphere/bin/`, and the gateway/daemon restart.
+2. Performs `git pull --ff-only` against `AUTO_UPDATE_BRANCH` (with a
+   `git fetch` + `git reset --hard origin/<branch>` fallback when the
+   working tree is clean and the fast-forward fails).
 3. Re-runs `pip install -e .` if `pyproject.toml` or any `metasphere/*.py`
    changed since the "from" hash.
-4. Runs `pytest -m 'not live' -q` (when wired through the python entry).
-   On failure: skips the daemon restart and sends a telegram alert. The
-   host is left on the new hash but daemons stay on the previous code
-   path until the human intervenes.
-5. Writes `~/.metasphere/state/auto-update.state.json` with last result.
-6. Sends a telegram notification if `AUTO_UPDATE_NOTIFY=true`.
+4. Runs `pytest -m 'not live' -q`. On failure: skips the daemon restart
+   and sends a telegram alert. The host is left on the new hash but
+   daemons stay on the previous code path until the human intervenes.
+5. Restarts the gateway daemon when `AUTO_UPDATE_RESTART_DAEMONS=true`.
+6. Writes `~/.metasphere/state/auto-update.state.json` with last result.
+7. Sends a telegram notification if `AUTO_UPDATE_NOTIFY=true`.
 
 ## Logs and state
 
@@ -86,16 +87,30 @@ metasphere update
 
 ## Rollback
 
-```bash
-metasphere update --disable        # stop the cron job
-cd ~/Code/metasphere-agents        # or wherever the install source lives
-git reset --hard <known-good-hash>
-metasphere update                  # re-runs scripts/pip install on the
-                                   # rolled-back tree
-```
-
 State (`auto-update.state.json`) holds the previous good hash for
 reference.
+
+```bash
+metasphere update --disable        # stop the cron job
+```
+
+Then pin to the known-good version:
+
+- **Non-editable installs:** force a clean reinstall against the
+  desired tag/SHA.
+
+  ```bash
+  pip uninstall metasphere
+  pip install 'git+https://github.com/julianfleck/metasphere-agents@<known-good-hash>'
+  ```
+
+- **Editable installs (`pip install -e .`):** roll the checkout back in
+  place. Find it with `pip show metasphere | grep Location`, then:
+
+  ```bash
+  git -C <metasphere-agents repo root> reset --hard <known-good-hash>
+  metasphere update                # re-runs the test gate on the rolled-back tree
+  ```
 
 ## Security
 
@@ -104,8 +119,7 @@ install time. **If origin is hijacked, the host is compromised.**
 Mitigations:
 
 - Pin the SSH `known_hosts` entry for github.com (or whichever origin) at
-  install time. Future installer work will fail-safe if the host key
-  rotates.
+  install time.
 - `AUTO_UPDATE_BRANCH` allows pointing the host at any branch — useful
   for staging, dangerous in production. Only override on hosts you
   control end-to-end.

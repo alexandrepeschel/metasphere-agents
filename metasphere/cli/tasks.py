@@ -19,7 +19,7 @@ With no arguments, lists active tasks for the current scope. Commands:
 
 Priorities: `!urgent`, `!high`, `!normal` (default), `!low`.
 Tasks are stored under `.tasks/active/` at the current scope and
-move to `.tasks/completed/` on `done`.
+move to `.tasks/archive/YYYY-MM-DD/` on `done`.
 """
 
 

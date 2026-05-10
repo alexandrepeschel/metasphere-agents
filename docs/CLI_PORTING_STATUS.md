@@ -64,15 +64,21 @@ subprocess calls under `metasphere/*.py` (outside `cli/`) are:
 All of these are the *correct* use of subprocess (binding to an
 external daemon/tool, not re-invoking a bash script of ours).
 
-### 3. `scripts/` directory — one Python utility left
+### 3. `scripts/` directory — utilities only
 
 ```
 scripts/
-└── migrate_task_frontmatter.py   # one-shot frontmatter migration
+├── metasphere-reaper                       # bash: npm-root-g zombie reaper (see docs/OPS.md)
+├── migrate_schedule_agent_ids.py           # one-shot schedule-agent-id migration
+├── migrate_schedule_exit_self_flag.py      # one-shot schedule exit-self flag migration
+├── migrate_task_frontmatter.py             # one-shot task frontmatter migration
+└── test_metasphere_reaper.sh               # functional test for the reaper
 ```
 
-No `.sh` files, no bash entry points. `scripts/metasphere` and its
-siblings were removed in `dea85c2` / `f5590eb`.
+No bash entry points for the CLI itself. `scripts/metasphere` and its
+siblings were removed in `dea85c2` / `f5590eb`. The two remaining
+`*.sh` files (`metasphere-reaper`, `test_metasphere_reaper.sh`) are
+host-ops utilities, not CLI shims, and are documented in `docs/OPS.md`.
 
 ### 4. `metasphere/cli/_shims.py` — still needed
 
@@ -110,21 +116,11 @@ Port preserves the structural information users relied on:
 - projects: count of initialised projects
 - orchestrator gateway: alive/idle probe
 
-Gaps vs the old bash `cmd_status`, left as non-blockers:
-
-- [ ] **Telegram bot-getMe liveness probe** (~15 LOC, touches
-  `metasphere/telegram/` — needs HTTP call + error handling)
-- [ ] **CAM (Collective Agent Memory) presence/version** (~10 LOC,
-  `shutil.which('cam')` + parse `cam --version`)
-- [ ] **Last-Telegram-message preview** (~10 LOC, read
-  `~/.metasphere/telegram/latest.json`)
-- [ ] **Unread-messages-in-inbox count** (~15 LOC, walk
-  `.messages/inbox/*.msg` + parse frontmatter for `status: unread`)
-
-All four are cosmetic polish. None affect correctness or automation.
-Suggested one-shot if a human wants to close them in a single future
-PR (est. **~50 LOC + tests**, single file touch on
-`metasphere/status.py`).
+No outstanding gaps tracked here. The bash-era polish items (telegram
+bot-getMe liveness, CAM presence/version, last-telegram preview,
+inbox unread count) were left as non-blockers in the cutover and
+deferred indefinitely with no caretaker. File a fresh issue if any
+of them turn out to matter in practice.
 
 ## What the port of `ls` covers
 
