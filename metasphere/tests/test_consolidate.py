@@ -1556,3 +1556,85 @@ def test_gc_reaps_ephemeral_without_persona_index(tmp_paths):
     assert len(results) == 1
     assert results[0]["agent"] == "@one-shot"
     assert not agent_dir.exists()
+
+
+def test_gc_does_not_kill_project_scoped_agent_when_global_ghost_dir_exists(tmp_paths):
+    """Regression (2026-05-09): a project-scoped agent (e.g. @explorer
+    under ``metasphere-agents``) was being GC'd as ``dead`` within ~37
+    seconds of being woken because:
+
+      1. A ghost ``~/.metasphere/agents/@explorer/`` dir exists with no
+         ``MISSION.md`` (created by some spawn path; root cause of the
+         dir is a separate issue — this test pins the GC's correctness
+         in its presence).
+      2. ``list_agents()`` returns BOTH records — global (from the
+         ghost dir) AND project-scoped (the live one).
+      3. ``_resolve_session`` walked the list and took the first match;
+         the global record came first and produced
+         ``metasphere-explorer`` instead of
+         ``metasphere-metasphere-agents-explorer``.
+      4. ``session_alive("metasphere-explorer")`` was False; the live
+         project-scoped session was still running under its
+         project-aware name.
+      5. GC marked the agent ``dead``, fired ``agent.gc``, and removed
+         the ghost dir — surface symptom: ``[agent.gc] @explorer
+         cleaned up (dead)`` log spam and a downstream signal that the
+         agent had died.
+
+    The fix in ``_resolve_session`` prefers the project-scoped record
+    over the global one (mirrors ``Paths.find_agent_dir``). With the
+    project-aware session name returned, ``session_alive`` returns
+    True, and the GC skips the entry.
+    """
+    from unittest import mock as _mock
+    from metasphere.agents import AgentRecord
+
+    # Ghost global dir — the precondition. No MISSION.md (so the GC
+    # considers it ephemeral) and no ``complete:`` status (so the GC's
+    # decision turns on the alive-session check).
+    ghost_dir = tmp_paths.agents / "@explorer"
+    ghost_dir.mkdir(parents=True)
+    (ghost_dir / "harness.md").write_text("# Agent: @explorer\n")
+
+    # Both records exist, in the order list_agents() returns them:
+    # global first, project-scoped second. This mirrors
+    # ``_list_agents_in_dir(paths.agents)`` then walking projects/.
+    global_rec = AgentRecord(
+        name="@explorer",
+        scope="",
+        parent="",
+        status="",
+        spawned_at="",
+        project="",  # global ghost
+        agent_dir=ghost_dir,
+    )
+    project_rec = AgentRecord(
+        name="@explorer",
+        scope="",
+        parent="",
+        status="",
+        spawned_at="",
+        project="metasphere-agents",  # the live project-scoped agent
+    )
+
+    checked: list[str] = []
+
+    def fake_alive(name: str) -> bool:
+        checked.append(name)
+        # Only the project-aware session is alive — the global session
+        # name doesn't exist.
+        return name == "metasphere-metasphere-agents-explorer"
+
+    with _mock.patch(
+        "metasphere.session.list_agents",
+        return_value=[global_rec, project_rec],
+    ), _mock.patch("metasphere.agents.session_alive", fake_alive):
+        results = _con._gc_ephemeral_agents(tmp_paths, dry_run=False)
+
+    # The resolver must have picked the project-aware session name.
+    assert checked == ["metasphere-metasphere-agents-explorer"], (
+        f"expected project-aware session name only, got {checked!r}"
+    )
+    # Nothing was GC'd — the live agent is preserved.
+    assert results == []
+    assert ghost_dir.exists()

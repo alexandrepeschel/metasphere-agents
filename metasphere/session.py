@@ -121,6 +121,15 @@ def _resolve_session(name_or_agent: str) -> str:
     ``session_name_for`` alone produces the unscoped form and misses
     these. So look up the ``AgentRecord`` and prefer its
     ``session_name`` over the canonical fallback.
+
+    When records exist in BOTH the global agents dir and a project's
+    agents dir for the same agent name, the project-scoped record wins
+    — matches :meth:`Paths.find_agent_dir`. A ghost ``@<name>`` dir in
+    ``~/.metasphere/agents/`` (created without ``MISSION.md`` by some
+    spawn paths) would otherwise mask the live project-scoped session
+    and produce ``metasphere-<name>`` instead of
+    ``metasphere-<project>-<name>``, which is the chain that makes the
+    consolidate-pass GC mark a live project-scoped agent as dead.
     """
     if name_or_agent.startswith(_SESSION_PREFIX):
         return name_or_agent
@@ -133,9 +142,20 @@ def _resolve_session(name_or_agent: str) -> str:
     if agent == "@orchestrator":
         return SESSION_NAME
 
+    project_scoped = None
+    global_scoped = None
     for rec in list_agents():
-        if rec.name == agent:
-            return rec.session_name
+        if rec.name != agent:
+            continue
+        if rec.project:
+            project_scoped = rec
+            break  # project-scoped is preferred — first project hit wins
+        if global_scoped is None:
+            global_scoped = rec
+
+    chosen = project_scoped or global_scoped
+    if chosen is not None:
+        return chosen.session_name
 
     # Unknown agent (e.g. ephemeral not in the registry): fall back to
     # the canonical project-less name.
