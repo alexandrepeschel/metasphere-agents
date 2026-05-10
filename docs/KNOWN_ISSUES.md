@@ -82,31 +82,7 @@ the line — history is signal). Newest at top of each section.
 
 **Superseded (2026-05-08)** — this checklist tracked end-to-end coverage of
 pre-Python-rewrite bash scripts. The Python CLI surface (`metasphere/cli/*.py`)
-has unit-test coverage in `metasphere/tests/test_cli_*.py`; the bash scripts
-listed below are either retired or now thin shims that delegate to Python.
-Lines preserved as historical record; do not interpret as open work.
-
-Each script needs an end-to-end pass. Mark `[x]` when verified, `[!]` when broken.
-
-- [ ] `messages` (send/reply/done/read/tree/status)
-- [ ] `tasks` (new/start/update/done/list)
-- [ ] `metasphere` (status/ls/agents/watch)
-- [ ] `metasphere-spawn` (full lifecycle, child auto-exec)
-- [ ] `metasphere-context` (hook output, all sections)
-- [ ] `metasphere-events` (log/list/filter)
-- [ ] `metasphere-agent` (activity, identity)
-- [ ] `metasphere-fts` (CAM search)
-- [ ] `metasphere-heartbeat`
-- [ ] `metasphere-identity`
-- [ ] `metasphere-migrate`
-- [ ] `metasphere-posthook` (Stop hook → telegram routing)
-- [ ] `metasphere-project`
-- [ ] `metasphere-schedule` (cron port)
-- [ ] `metasphere-session`
-- [ ] `metasphere-telegram` (send)
-- [ ] `metasphere-telegram-groups`
-- [ ] `metasphere-telegram-stream`
-- [ ] `metasphere-tmux-submit`
-- [ ] `metasphere-trace`
-- [ ] `metasphere-git-hooks`
-- [ ] `metasphere-gateway`
+has unit-test coverage in `metasphere/tests/test_cli_*.py`; the listed bash
+scripts are either retired or thin shims that delegate to Python. The original
+checklist is preserved in git history (see commits prior to 2026-05-10); do
+not interpret it as open work.

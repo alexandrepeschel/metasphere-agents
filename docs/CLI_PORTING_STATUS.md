@@ -149,12 +149,12 @@ Improvements vs the bash version:
 
 ## Remaining follow-up (none blocking)
 
-- [ ] Close the four `metasphere status` cosmetic gaps (≈50 LOC).
 - [ ] Migrate remaining `metasphere-*` console-script callers over to
   the `metasphere <subcommand>` form, then delete `cli/_shims.py`.
   Non-trivial: audit shell profiles, systemd units, hook JSON across
   deployed hosts first.
-- [ ] `metasphere/update.py` is still the only place in `metasphere/`
-  that shells out to `git` for mutation (not just resolution). Its
-  subprocess use is correct; flagged here only so future greps don't
-  surprise.
+
+Informational (not open work): `metasphere/update.py` is the only place
+in `metasphere/` that shells out to `git` for mutation (not just
+resolution). Its subprocess use is correct; noted so future greps for
+shelled-out git don't surprise.
