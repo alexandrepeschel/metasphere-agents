@@ -371,7 +371,9 @@ def _ensure_scaffold(p: Path, *, paths: Optional[Paths] = None,
     function created ``.tasks/`` / ``.messages/`` / ``.changelog/`` /
     ``.learnings/`` in the repo itself (``p / ".tasks/active"`` etc.);
     those are legacy on-disk layouts that the migration subcommand
-    moves into the canonical root.
+    moves into the canonical root. ``shared/`` (PR #101) is the
+    cross-agent artifact surface and is canonical-only — no legacy
+    in-repo form.
 
     ``p`` is still the repo path (used for the in-repo ``.metasphere/``
     backstop marker directory some older tools probe). ``project_name``

@@ -6,7 +6,7 @@
 
 | Piece | State |
 |---|---|
-| `metasphere/project.py` | `init_project(name, path)` creates `.metasphere/project.json`, `.tasks/{active,completed}/`, `.messages/{inbox,outbox}/`, `.changelog/`, `.learnings/`. Registers in `~/.metasphere/projects.json`. |
+| `metasphere/project.py` | `init_project(name, path)` creates `.metasphere/project.json`, `.tasks/{active,completed}/`, `.messages/{inbox,outbox}/`, `.changelog/`, `.learnings/`, `shared/`. Registers in `~/.metasphere/projects.json`. |
 | `metasphere project init [path]` / `list` / `changelog` / `learnings` | Working CLI subcommands. |
 | `metasphere agent spawn` / `wake` | Spawns ephemeral agents (`claude -p`) and wakes persistent agents (tmux+REPL respawn loop). Persistence is detected by `MISSION.md` presence under `~/.metasphere/agents/@name/`. |
 | `metasphere agent list` / `status` | Filters to persistent agents only. |

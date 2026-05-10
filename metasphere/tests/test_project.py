@@ -15,7 +15,7 @@ def test_init_creates_marker_and_registers(tmp_paths, tmp_path):
     # In-repo legacy marker + canonical project.json both still created.
     assert (proj_dir / ".metasphere").is_dir()
     assert (tmp_paths.projects / "alpha" / "project.json").exists()
-    # Canonical-layout scaffold: .tasks/.messages/.changelog/.learnings
+    # Canonical-layout scaffold: .tasks/.messages/.changelog/.learnings/shared
     # now live under ~/.metasphere/projects/<name>/, not in-repo.
     assert (tmp_paths.projects / "alpha" / ".tasks" / "active").is_dir()
     assert (tmp_paths.projects / "alpha" / ".messages" / "inbox").is_dir()
