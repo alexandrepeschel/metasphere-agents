@@ -4,7 +4,7 @@ Boilerplate dropped into freshly-spawned agents.
 
 ## `agent-harness.md`
 
-Bootstrap document copied into a new agent's identity directory (`~/.metasphere/agents/@<name>/`) when `metasphere-spawn` creates it. Contains:
+Bootstrap document copied into a new agent's identity directory (`~/.metasphere/agents/@<name>/`) when `metasphere agent spawn` creates it. Contains:
 
 - The agent's role and scope as the first thing it reads
 - The same operational primer as the project `CLAUDE.md` (messages CLI, tasks CLI, completion protocol, message labels, task priorities)
