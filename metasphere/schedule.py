@@ -279,8 +279,10 @@ def _extract_messages_send_target(payload: str) -> str | None:
     """Parse ``payload`` as a ``messages send @X !label ...`` command and
     return ``@X`` if it matches, else None.
 
-    Handles both bare ``messages`` (assumed on PATH) and full-path forms
-    like ``/usr/local/bin/messages`` or ``scripts/messages``.
+    Matches any path whose basename is ``messages`` (the legacy CLI form
+    that some older scheduled jobs may still reference) — bare or
+    full-path. New jobs use ``metasphere msg send @X !label …`` which
+    is dispatched separately and not parsed here.
     """
     import shlex
 

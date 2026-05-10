@@ -686,7 +686,7 @@ def mark_read(msg_id: str, paths: Paths | None = None) -> Message:
 
 
 # ---------------------------------------------------------------------------
-# Wake (tmux plumbing stays in bash)
+# Wake (tmux plumbing in metasphere.tmux)
 # ---------------------------------------------------------------------------
 
 

@@ -12,8 +12,7 @@ Schema::
     contacts:
       <name>:
         telegram: <chat_id>
-        # email: <addr>      # future
-        # slack: <user_id>   # future
+        # (only telegram_chat_id supported today)
 
 The file is:
 - Optional. Stranger installs without it get an empty addressbook

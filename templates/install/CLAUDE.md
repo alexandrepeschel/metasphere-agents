@@ -257,7 +257,7 @@ pending → in-progress → completed
 ## Legacy harness migration
 
 If your host previously ran an older agent harness (e.g.
-[openclaw](https://docs.openclaw.ai/)), `install.sh` can register
+openclaw), `install.sh` can register
 the prior workspace as a *live legacy context source* rather than
 copying files out of it. When that registration is in place, the
 per-turn context hook may inject persona files (SOUL, IDENTITY,

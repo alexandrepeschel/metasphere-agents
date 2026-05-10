@@ -262,9 +262,8 @@ _TELEGRAM_BYTE_CAP = 1024
 def _render_telegram(paths: Paths, history: int = 3) -> str:
     """Render the recent telegram conversation.
 
-    Uses the Python ``telegram_context()`` function directly instead of
-    shelling out to ``scripts/metasphere-telegram-stream``. Caps at
-    ``_TELEGRAM_BYTE_CAP`` bytes.
+    Reads from :func:`metasphere.telegram.archiver.telegram_context`
+    directly (no subprocess). Caps at ``_TELEGRAM_BYTE_CAP`` bytes.
     """
     from .telegram.archiver import telegram_context
 

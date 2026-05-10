@@ -120,7 +120,7 @@ new project. Ask, in order:
 1. Project name (required, kebab-case suggested)
 2. Path on disk — default $PWD/<name>, but allow override. If they
    provide a git URL instead, treat it as `--repo` and clone into
-   `~/Code/<name>` (or wherever they specify).
+   `<chosen-path>/<name>` (or wherever they specify).
 3. Project goal (one sentence — what is this project trying to achieve)
 4. Members — which persistent agents should belong to this project?
    Default: just @orchestrator. Offer to also add common roles
@@ -148,7 +148,7 @@ If $ARGUMENTS is anything else, show this slash command's help and
 the available metasphere project subcommands.
 ```
 
-This is the right shape because (a) the wizard is conversational, not a series of `argparse` prompts, (b) the orchestrator can interpret partial input ("just call it `example-edge` and use the existing `~/Code/example` repo, members are me and @researcher"), and (c) the slash command is dead simple — it's a prompt, not code.
+This is the right shape because (a) the wizard is conversational, not a series of `argparse` prompts, (b) the orchestrator can interpret partial input ("just call it `example-edge` and use the existing `<chosen-path>/example` repo, members are me and @researcher"), and (c) the slash command is dead simple — it's a prompt, not code.
 
 ## Per-turn context injection
 

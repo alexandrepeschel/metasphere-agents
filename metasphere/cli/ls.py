@@ -239,9 +239,8 @@ def _render_agents(c: _C, paths: Paths, lines: list[str],
 def _render_tasks(c: _C, paths: Paths, lines: list[str]) -> None:
     """Task summary across the project root and all registered projects.
 
-    The bash version invoked the legacy ``scripts/tasks`` binary and
-    piped to ``head -10``; we use :func:`metasphere.tasks.list_tasks`
-    against the configured scope+repo instead.
+    Uses :func:`metasphere.tasks.list_tasks` against the configured
+    scope+repo and renders up to 10 lines.
     """
     lines.append(f"{c.bold}Tasks{c.nc}")
     try:
