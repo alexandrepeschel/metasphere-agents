@@ -404,6 +404,13 @@ def wake_main(argv: list[str] | None = None) -> int:
         return 1
     agent = head
     first_task = argv[1] if len(argv) >= 2 else None
+    if first_task and first_task.startswith("-"):
+        print(
+            f"metasphere agent wake: '{first_task}' looks like a flag, not a task.\n"
+            f"Usage: metasphere agent wake @agent [\"first task\"]",
+            file=sys.stderr,
+        )
+        return 1
     try:
         rec = _agents.wake_persistent(agent, first_task=first_task)
     except ValueError as e:
