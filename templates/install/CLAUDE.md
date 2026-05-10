@@ -77,7 +77,8 @@ projects/<name>/
 ├── .tasks/         # Active and completed tasks
 ├── .messages/      # Per-project inbox/outbox
 ├── .changelog/     # Project-scoped changes
-└── .learnings/     # Project-scoped insights
+├── .learnings/     # Project-scoped insights
+└── shared/         # Cross-agent artifacts (visible to teammates)
 ```
 
 Manage projects from your REPL:
@@ -202,7 +203,8 @@ metasphere session restart            # Restart orchestrator REPL
 │   └── <project>/
 │       ├── CLAUDE.md        # Project descriptor (goal, members)
 │       ├── .tasks/          # Active and completed tasks
-│       └── .messages/       # Inbox / outbox
+│       ├── .messages/       # Inbox / outbox
+│       └── shared/          # Cross-agent artifacts
 └── state/                   # Daemon state (don't edit by hand)
 ```
 
