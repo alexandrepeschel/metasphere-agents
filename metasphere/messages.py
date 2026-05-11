@@ -675,13 +675,21 @@ def archive_message(msg_path: Path) -> Path:
 
 
 def mark_read(msg_id: str, paths: Paths | None = None) -> Message:
+    """Promote an UNREAD message to READ and stamp ``read_at``.
+
+    Sacred labels (``!task``, ``!query``) are left unread: they require
+    explicit action by the recipient, and stamping ``read_at`` from any
+    curious peek-read would pollute the STALE window that
+    :mod:`metasphere.consolidate` computes from that timestamp. Mirrors
+    the guard in :func:`read_message` view-mode (see issue #109).
+    """
     paths = paths or resolve()
     p = _find_inbox_msg(msg_id, paths.project_root, paths=paths)
     if p is None:
         raise FileNotFoundError(f"message {msg_id} not found")
     with file_lock(_lock_path(p)):
         msg = read_message(p)
-        if msg.status == STATUS_UNREAD:
+        if msg.status == STATUS_UNREAD and msg.label not in SACRED_LABELS:
             msg.status = STATUS_READ
             msg.read_at = _utcnow()
             write_frontmatter_file(p, msg.to_frontmatter())

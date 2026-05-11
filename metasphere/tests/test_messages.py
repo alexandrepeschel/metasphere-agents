@@ -283,6 +283,40 @@ def test_collect_inbox_view_marks_nonsacred_read(tmp_paths):
     assert by_label["!task"].status == m.STATUS_UNREAD
 
 
+def test_mark_read_flips_info_status(tmp_paths):
+    msg = m.send_message(
+        "@.", "!info", "fyi", "@child", paths=tmp_paths, wake=False
+    )
+    assert msg.status == m.STATUS_UNREAD
+    after = m.mark_read(msg.id, paths=tmp_paths)
+    assert after.status == m.STATUS_READ
+    assert after.read_at != ""
+    reloaded = m.read_message(msg.path)
+    assert reloaded.status == m.STATUS_READ
+    assert reloaded.read_at == after.read_at
+
+
+def test_mark_read_leaves_task_unread(tmp_paths):
+    msg = m.send_message(
+        "@.", "!task", "do the thing", "@child", paths=tmp_paths, wake=False
+    )
+    after = m.mark_read(msg.id, paths=tmp_paths)
+    assert after.status == m.STATUS_UNREAD
+    assert after.read_at == ""
+    reloaded = m.read_message(msg.path)
+    assert reloaded.status == m.STATUS_UNREAD
+    assert reloaded.read_at == ""
+
+
+def test_mark_read_leaves_query_unread(tmp_paths):
+    msg = m.send_message(
+        "@.", "!query", "ping?", "@child", paths=tmp_paths, wake=False
+    )
+    after = m.mark_read(msg.id, paths=tmp_paths)
+    assert after.status == m.STATUS_UNREAD
+    assert after.read_at == ""
+
+
 def test_reply_marks_original_and_sets_reply_to(tmp_paths):
     # Original message lands in the scope inbox, as if a peer sent it.
     orig = m.send_message(
