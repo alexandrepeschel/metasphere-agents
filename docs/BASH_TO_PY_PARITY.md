@@ -1,9 +1,11 @@
 # Bash → Python Cutover Parity Matrix
 
 > **Historical document.** As of 2026-04-14 the migration is complete.
-> See [`CLI_PORTING_STATUS.md`](./CLI_PORTING_STATUS.md) for the current
-> snapshot of every subcommand + its handler. The matrix below is kept
-> for git-archaeology context only.
+> The live CLI surface is documented in [`CLI.md`](./CLI.md) (auto-
+> generated from each handler's `DESCRIPTION`/`USAGE` constants); see
+> [`CLI_PORTING_STATUS.md`](./CLI_PORTING_STATUS.md) for the cutover-day
+> closeout snapshot + audit findings. The matrix below is kept for
+> git-archaeology context only.
 
 
 Live binaries are in `~/.metasphere/bin/`. The Python entry point

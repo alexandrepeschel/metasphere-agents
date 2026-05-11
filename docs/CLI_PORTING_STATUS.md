@@ -1,5 +1,13 @@
 # CLI Porting Status — 2026-04-14
 
+> **Historical document.** This is the cutover-day snapshot. The live
+> CLI surface — every shipped subcommand with current `--help` output —
+> is auto-generated at [`docs/CLI.md`](./CLI.md) from each handler's
+> `DESCRIPTION`/`USAGE` constants. The single source of truth for the
+> dispatcher is `metasphere/cli/_registry.py:SUBCOMMANDS`. This file is
+> preserved for design rationale (audit findings + decisions made at
+> cutover); see "Drift since snapshot" below for facts that have moved.
+
 Snapshot of the `metasphere <subcommand>` dispatcher after the final
 bash→Python cutover. This document supersedes the older
 `docs/BASH_TO_PY_PARITY.md` matrix (which described the *migration in
@@ -11,6 +19,24 @@ progress*); parity is now reached.
 > The only subprocess calls left inside `metasphere/` are for `git`,
 > `tmux`, `systemctl`/`launchctl`, and `curl`-replacement HTTP via
 > `urllib` — none of which are bash shell-outs for feature logic.
+
+## Drift since snapshot (audit @explorer 2026-05-11)
+
+Spot-check of the load-bearing claims below against current `main`:
+
+- **Registry table** has grown from 19 to 26 entries. Subcommands
+  added since cutover (not in the table): `daemon`, `logs`, `config`,
+  `restart`, `accounts`, `audit-docs`, `migrate-project-dirs`, `docs`,
+  `version`. Check `metasphere/cli/_registry.py` for the live list.
+- **Section 2** — the literal `grep -rn 'subprocess' metasphere/cli/`
+  is no longer zero. Current hits: `version.py` (git rev-parse for
+  HEAD), `audit_docs.py` (git log), `restart.py` + `daemon.py`
+  (systemctl), `session.py` (tmux), `failsafe.py` (tmux capture-pane).
+  All are correct external-tool bindings, not bash shell-outs for
+  feature logic — so the *spirit* of the section holds; only the
+  zero-hit literal is wrong.
+- **Section 4** — `metasphere/cli/_shims.py` still ships and is still
+  needed for legacy `metasphere-*` console-script entrypoints.
 
 ## Registry status
 
