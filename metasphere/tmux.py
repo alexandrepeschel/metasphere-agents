@@ -288,11 +288,33 @@ def submit_to_tmux(
             check=False,
         )
 
-        # Settle, then single C-m. The TUI's submit handler can take
-        # up to 8-10s to process a multi-line paste (bracketed-paste
-        # event fires → TUI renders as [Pasted text #N] placeholder →
-        # commit processes content → submits).
+        # Settle, then wait for the paste to actually land in the input
+        # box before firing the submit C-m. The Claude Code TUI
+        # (Ink/React) processes the bracketed-paste event asynchronously:
+        # paste-buffer dumps the content to the TTY immediately, but
+        # the TUI's render pass that surfaces the chars (inline for
+        # short payloads, ``[Pasted text #N]`` placeholder for long
+        # ones) can lag 0.5–4s on a busy host.
+        #
+        # If C-m fires before the paste has landed, the TUI submits an
+        # empty input (no-op) and the paste content arrives moments
+        # later — sitting in the input box forever with no
+        # ``[Pasted text #`` placeholder for ``submit_watchdog`` to
+        # recover from. This is the smoking gun for the "input stuck
+        # in pane, not submitted" outage: heartbeats then ``defer`` on
+        # the leftover typing signal, perpetuating the stuck state.
+        #
+        # Poll up to ~5s for paste-landed. Most pastes are visible in
+        # <0.5s. If the poll times out we still fire C-m anyway —
+        # better to attempt the submit than silently drop the message;
+        # the post-submit poll below will return False if it didn't
+        # take, surfacing the failure to the caller.
         time.sleep(0.3)
+        for _ in range(10):
+            if (_has_pending_paste(tmux, session)
+                    or _input_line_has_typing(tmux, session)):
+                break
+            time.sleep(0.5)
         subprocess.run(
             # C-m (ASCII 0x0D) raw byte. tmux 3.3a's 'Enter' keysym
             # doesn't trigger submit in Claude Code's TUI (Ink/React)

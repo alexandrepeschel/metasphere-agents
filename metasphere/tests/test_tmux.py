@@ -507,6 +507,83 @@ def test_submit_polls_until_input_clears_no_retry_c_m(monkeypatch):
     )
 
 
+def test_submit_waits_for_paste_to_land_before_firing_c_m(monkeypatch):
+    """The submit C-m must not fire until the paste content is actually
+    visible in the input box.
+
+    Failure mode this guards against: ``paste-buffer`` is asynchronous
+    from the TUI's perspective — content lands in the pane TTY input
+    immediately, but Claude Code's Ink/React render pass can lag
+    several seconds before the bracketed-paste event surfaces as
+    visible content (inline or as ``[Pasted text #N]`` placeholder).
+    If the submit C-m fires while the input box is still empty, it
+    no-ops; the paste then arrives and sits in the input box
+    forever, with no ``[Pasted text #`` marker for ``submit_watchdog``
+    to recover from. Symptom: heartbeats start ``defer`` ing on the
+    leftover typing signal and the agent never receives the message.
+
+    Pin: before firing the submit C-m, ``submit_to_tmux`` polls
+    ``capture-pane`` until paste-landed is observed (typing or
+    placeholder). The submit C-m must come AFTER that observation.
+    """
+    pane_states = [
+        # Pre-flight capture(s) before paste lands. The polling loop
+        # checks `_has_pending_paste` (last-5-lines) and
+        # `_input_line_has_typing` (inspects input box) — both must
+        # report "clean" for a bare prompt. `_pane(["❯ "])` produces
+        # a pane where neither signal fires.
+        _pane(["❯ "]),
+        _pane(["❯ "]),
+        _pane(["❯ "]),
+        # Paste lands — content now visible in the input box.
+        _pane(["❯ payload"]),
+        # Subsequent post-submit captures show clean (submit took).
+        _pane(["❯ "]),
+        _pane(["❯ "]),
+    ]
+    calls: list[list[str]] = []
+
+    def fake_run(argv, **kw):
+        calls.append(list(argv))
+        if "has-session" in argv:
+            return _fake_cp(returncode=0)
+        if "capture-pane" in argv:
+            stdout = pane_states.pop(0) if pane_states else _pane(["❯ "])
+            return _fake_cp(stdout=stdout)
+        return _fake_cp(returncode=0)
+
+    monkeypatch.setattr("subprocess.run", fake_run)
+    monkeypatch.setattr(T, "_find_tmux", lambda: "/usr/bin/tmux")
+
+    assert T.submit_to_tmux("sess", "payload", escape_prefix=False) is True
+
+    # Locate paste-buffer + the two C-m fires (pre-flush + submit).
+    paste_idx = next(i for i, c in enumerate(calls) if "paste-buffer" in c)
+    c_m_indices = [
+        i for i, c in enumerate(calls)
+        if "send-keys" in c and "C-m" in c
+    ]
+    # The submit C-m is the C-m AFTER paste-buffer (the pre-flush one
+    # is before).
+    post_paste_c_m = [i for i in c_m_indices if i > paste_idx]
+    assert post_paste_c_m, "expected a submit C-m after paste-buffer"
+    submit_idx = post_paste_c_m[0]
+
+    # Between paste-buffer and submit C-m, at least one capture-pane
+    # must have observed the paste landing. (With the pre-fix behavior
+    # — fixed 0.3s sleep then C-m — there would be ZERO capture-pane
+    # calls between paste-buffer and C-m.)
+    captures_between = [
+        i for i, c in enumerate(calls)
+        if "capture-pane" in c and paste_idx < i < submit_idx
+    ]
+    assert captures_between, (
+        "submit C-m fired without verifying the paste landed in the "
+        f"input box first. paste_idx={paste_idx}, submit_idx={submit_idx}, "
+        f"calls in between: {calls[paste_idx + 1:submit_idx]}"
+    )
+
+
 def test_submit_returns_false_if_enter_never_lands(monkeypatch):
     """Simulate the worst case: Claude TUI eats every Enter (input box
     never clears). After 3 retries, the final check still sees typed
