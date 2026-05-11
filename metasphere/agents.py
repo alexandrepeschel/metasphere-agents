@@ -568,8 +568,15 @@ def _wait_for_ready(session: str, timeout_s: int = _READY_TIMEOUT_S) -> bool:
     return False
 
 
-def _submit_via_tmux(session: str, body: str) -> None:
+def _submit_via_tmux(session: str, body: str) -> bool:
     """Submit text to a tmux session via :mod:`metasphere.tmux`.
+
+    Returns the underlying :func:`metasphere.tmux.submit_to_tmux` bool so
+    the caller can detect silent inject failures (missing tmux, session
+    vanished mid-flight, etc.) and fall through to inbox-only delivery.
+    Discarding this return was the root of the scheduled-task wake-gap
+    (issue #106): a tmux failure looked indistinguishable from success
+    and the task disappeared into a stamped-but-not-delivered state.
 
     Wakes pass ``escape_prefix=False``: an agent wake is a task-inject,
     not an interrupt. The pre-Escape was intended to interrupt a
@@ -590,7 +597,7 @@ def _submit_via_tmux(session: str, body: str) -> None:
     for wakes: we want our task to be processed, not to displace
     whatever the agent is doing mid-flight.
     """
-    _tmux_submit(session, body, escape_prefix=False)
+    return _tmux_submit(session, body, escape_prefix=False)
 
 
 def wake_persistent(
@@ -599,11 +606,18 @@ def wake_persistent(
     paths: Paths | None = None,
     *,
     model: str = "",
-) -> AgentRecord:
+) -> tuple[AgentRecord, bool]:
     """Wake (or attach to) a persistent agent's tmux+REPL session.
 
     If the session is already alive, only the optional task is injected —
     no new session is created.
+
+    Returns ``(record, delivered)``. ``delivered`` is True when there was
+    nothing to deliver (``first_task`` is None) or when the inject
+    actually landed on the pane. False means the session existed but the
+    pane-submit silently failed (gateway cascade-reap mid-fire, tmux
+    binary gone, etc.); the caller should fall through to inbox-only
+    delivery so the message is at least durably written. See issue #106.
     """
     paths = paths or resolve()
     agent_id = _normalize_name(agent_name)
@@ -667,9 +681,10 @@ def wake_persistent(
             _tmux_run("kill-session", "-t", session)
             # Fall through to cold-start below.
         else:
+            delivered = True
             if first_task:
-                _submit_via_tmux(session, f"[task] {first_task}")
-            return rec
+                delivered = _submit_via_tmux(session, f"[task] {first_task}")
+            return rec, delivered
 
     # Cold start.
     _tmux_run("new-session", "-d", "-s", session, "-c", scope_str, check=False)
@@ -719,10 +734,11 @@ def wake_persistent(
     _tmux_run("send-keys", "-t", session, "C-u")
     time.sleep(0.2)
 
+    delivered = True
     if first_task:
-        _submit_via_tmux(session, f"[task] {first_task}")
+        delivered = _submit_via_tmux(session, f"[task] {first_task}")
 
-    return _agent_record_from_dir(agent_dir, project=project)
+    return _agent_record_from_dir(agent_dir, project=project), delivered
 
 
 # ---------------------------------------------------------------------------

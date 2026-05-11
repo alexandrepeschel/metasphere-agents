@@ -543,6 +543,76 @@ def test_wake_persistent_already_alive_injects_task(tmp_paths: Paths):
     )
 
 
+def test_wake_persistent_returns_delivered_true_on_successful_inject(tmp_paths: Paths):
+    """Issue #106: wake_persistent must report whether the first_task
+    actually landed on the pane so dispatch_to_agent can decide to fall
+    through to inbox delivery. Success case: tmux submit returns True →
+    delivered is True."""
+    _make_persistent(tmp_paths)
+
+    def fake_run(cmd, *args, **kwargs):
+        cp = MagicMock()
+        cp.returncode = 0 if "has-session" in cmd else 0
+        cp.stdout = ""
+        cp.stderr = ""
+        return cp
+
+    with patch("metasphere.agents.subprocess.run", side_effect=fake_run), \
+         patch("metasphere.agents._tmux_submit", return_value=True):
+        rec, delivered = agents.wake_persistent(
+            "@waker", first_task="hello", paths=tmp_paths,
+        )
+
+    assert rec.name == "@waker"
+    assert delivered is True
+
+
+def test_wake_persistent_returns_delivered_false_on_silent_submit_failure(tmp_paths: Paths):
+    """Issue #106: when _tmux_submit silently returns False (session
+    vanished mid-fire, defer-if-busy, tmux binary gone), wake_persistent
+    must propagate that as ``delivered=False`` so the schedule daemon
+    falls through to inbox-only delivery instead of stamping
+    last_fired_at and losing the task forever."""
+    _make_persistent(tmp_paths)
+
+    def fake_run(cmd, *args, **kwargs):
+        cp = MagicMock()
+        cp.returncode = 0  # session alive
+        cp.stdout = ""
+        cp.stderr = ""
+        return cp
+
+    with patch("metasphere.agents.subprocess.run", side_effect=fake_run), \
+         patch("metasphere.agents._tmux_submit", return_value=False):
+        rec, delivered = agents.wake_persistent(
+            "@waker", first_task="hello", paths=tmp_paths,
+        )
+
+    assert rec.name == "@waker"
+    assert delivered is False
+
+
+def test_wake_persistent_returns_delivered_true_when_no_first_task(tmp_paths: Paths):
+    """With ``first_task=None`` there's nothing to deliver, so the
+    delivery bool is vacuously True (the session is up, that's all the
+    caller asked for)."""
+    _make_persistent(tmp_paths)
+
+    def fake_run(cmd, *args, **kwargs):
+        cp = MagicMock()
+        cp.returncode = 0
+        cp.stdout = ""
+        cp.stderr = ""
+        return cp
+
+    with patch("metasphere.agents.subprocess.run", side_effect=fake_run), \
+         patch("metasphere.agents._tmux_submit", return_value=False):
+        rec, delivered = agents.wake_persistent("@waker", paths=tmp_paths)
+
+    assert rec.name == "@waker"
+    assert delivered is True
+
+
 # ---------------------------------------------------------------------------
 # gc_dormant
 # ---------------------------------------------------------------------------

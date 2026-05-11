@@ -355,7 +355,7 @@ def dispatch_task(
     # 2. Wake the agent if dormant
     agent_record = None
     try:
-        agent_record = _agents.wake_persistent(agent_id, paths=paths)
+        agent_record, _ = _agents.wake_persistent(agent_id, paths=paths)
     except ValueError:
         pass  # Not a persistent agent, or no MISSION.md — that's ok
 

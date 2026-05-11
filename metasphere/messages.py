@@ -19,6 +19,7 @@ two-bucket lookup.
 from __future__ import annotations
 
 import datetime as _dt
+import logging
 import os
 import re
 import threading
@@ -26,6 +27,8 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable
+
+logger = logging.getLogger(__name__)
 
 from .events import log_event
 from .io import (
@@ -696,8 +699,19 @@ def wake_recipient_if_live(
     from_agent: str,
     body: str,
     paths: Paths | None = None,
-) -> None:
-    """Best-effort wake via :mod:`metasphere.tmux`. Failures are silent."""
+) -> bool:
+    """Best-effort wake via :mod:`metasphere.tmux`.
+
+    Returns True when the wake notice actually landed on the target's
+    pane, False otherwise (no session, defer, submit failure, or
+    unresolvable target). The bool was added for issue #106 — callers
+    that previously treated wake-failure as success could leave
+    scheduled tasks stranded in inboxes after a gateway cascade-restart
+    killed the target session mid-fire.
+
+    Exceptions are caught + logged at WARNING (not silently swallowed)
+    so the failure shows up in the schedule/heartbeat daemon logs.
+    """
     from .tmux import submit_to_tmux as _tmux_submit
 
     paths = paths or resolve()
@@ -713,28 +727,44 @@ def wake_recipient_if_live(
         agent_name = target[1:]
 
     if not agent_name:
-        return
+        return False
 
-    session = f"metasphere-{agent_name}"
+    # Project-scoped agents have sessions named
+    # ``metasphere-<project>-<agent>`` (see ``AgentRecord.session_name``),
+    # which the bare ``metasphere-<name>`` constructor misses. Route
+    # through ``_resolve_session`` so wakes targeting project-scoped
+    # research / domain agents actually hit the right pane (issue #106).
+    from .session import _resolve_session
+    session = _resolve_session(f"@{agent_name}")
     body_preview = body[:200] + ("..." if len(body) > 200 else "")
     notice = f"[wake] new {label} from {from_agent}: {body_preview}"
 
+    delivered = False
     try:
         # defer_if_busy=True: agent-to-agent wakes are auto-fired;
         # never interleave with a human typing into the target pane.
         # escape_prefix=False: wakes must never interrupt a tool call
         # running in the target pane; the wake text queues until the
         # tool finishes.
-        _tmux_submit(session, notice, defer_if_busy=True, escape_prefix=False)
-    except Exception:
-        pass
+        delivered = bool(
+            _tmux_submit(session, notice, defer_if_busy=True, escape_prefix=False)
+        )
+    except Exception as e:
+        logger.warning(
+            "wake_recipient_if_live(%s): tmux submit raised: %s", target, e,
+        )
 
     try:
         log_event(
             "agent.wake",
-            f"@{agent_name} woken by {from_agent} ({label})",
+            f"@{agent_name} woken by {from_agent} ({label})"
+            + ("" if delivered else " [submit failed]"),
             agent=from_agent,
             paths=paths,
         )
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning(
+            "wake_recipient_if_live(%s): log_event raised: %s", target, e,
+        )
+
+    return delivered

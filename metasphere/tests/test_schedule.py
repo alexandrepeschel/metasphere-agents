@@ -179,7 +179,7 @@ def test_dispatch_prefers_wake_persistent_when_global_mission_exists(tmp_paths):
     (agent_dir / "MISSION.md").write_text("mission\n")
 
     with mock.patch("metasphere.schedule._agents.wake_persistent") as wake_mock:
-        wake_mock.return_value = mock.Mock()
+        wake_mock.return_value = (mock.Mock(), True)
         ok = _sched.dispatch_to_agent(target, "payload-text", paths=tmp_paths)
 
     assert ok is True
@@ -201,7 +201,7 @@ def test_dispatch_wakes_project_scoped_persistent_agent(tmp_paths):
     (proj_agent_dir / "MISSION.md").write_text("mission\n")
 
     with mock.patch("metasphere.schedule._agents.wake_persistent") as wake_mock:
-        wake_mock.return_value = mock.Mock()
+        wake_mock.return_value = (mock.Mock(), True)
         ok = _sched.dispatch_to_agent(target, "scan now", paths=tmp_paths)
 
     assert ok is True
@@ -226,6 +226,34 @@ def test_dispatch_to_agent_falls_back_to_inbox_when_wake_fails(tmp_paths):
 
     assert ok is True
     send_mock.assert_called_once()
+
+
+def test_dispatch_to_agent_falls_back_to_inbox_when_inject_silently_fails(tmp_paths):
+    """Issue #106 core regression: wake_persistent reaches the agent's
+    session but ``_submit_via_tmux`` returns False (gateway cascade-reap
+    mid-fire, session vanished between has-session and send-keys, etc.).
+    Previously the scheduler treated this as success, stamped
+    last_fired_at, and lost the task. Now it must fall through to
+    send_message so the inbox has the audit trail."""
+    target = "@acme"
+    agent_dir = tmp_paths.agent_dir(target)
+    agent_dir.mkdir(parents=True, exist_ok=True)
+    (agent_dir / "MISSION.md").write_text("mission\n")
+
+    with mock.patch("metasphere.schedule._agents.wake_persistent") as wake_mock, \
+            mock.patch("metasphere.schedule.send_message") as send_mock:
+        # Session came up but the inject silently failed.
+        wake_mock.return_value = (mock.Mock(), False)
+        send_mock.return_value = mock.Mock()
+        ok = _sched.dispatch_to_agent(target, "payload", paths=tmp_paths)
+
+    assert ok is True
+    wake_mock.assert_called_once()
+    send_mock.assert_called_once()
+    args, kwargs = send_mock.call_args
+    assert args[0] == target
+    assert args[1] == "!task"
+    assert args[2] == "payload"
 
 
 def test_dispatch_to_agent_ephemeral_uses_inbox(tmp_paths):
@@ -285,7 +313,7 @@ def test_dispatch_command_pre_wakes_messages_send_task_target(tmp_paths):
 
     with mock.patch("metasphere.schedule._agents.wake_persistent") as wake_mock, \
             mock.patch("metasphere.schedule.subprocess.run") as run_mock:
-        wake_mock.return_value = mock.Mock()
+        wake_mock.return_value = (mock.Mock(), True)
         run_mock.return_value = mock.Mock(returncode=0, stdout="", stderr="")
         ok = _sched.dispatch_command(
             'messages send @acme !task "run the acme pipeline"',
@@ -311,7 +339,7 @@ def test_dispatch_command_pre_wakes_project_scoped_research_target(tmp_paths):
 
     with mock.patch("metasphere.schedule._agents.wake_persistent") as wake_mock, \
             mock.patch("metasphere.schedule.subprocess.run") as run_mock:
-        wake_mock.return_value = mock.Mock()
+        wake_mock.return_value = (mock.Mock(), True)
         run_mock.return_value = mock.Mock(returncode=0, stdout="", stderr="")
         ok = _sched.dispatch_command(
             'messages send @research-brand-mentions !task "do the scan"',

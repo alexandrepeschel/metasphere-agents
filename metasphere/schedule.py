@@ -261,15 +261,23 @@ def _wake_target(
     """Wake ``target_agent`` via :func:`metasphere.agents.wake_persistent`.
 
     Idempotent: if the tmux session is already alive, the helper just
-    injects ``first_task`` (if any) and returns. Returns True on success,
-    False on any exception — callers fall back to inbox-only delivery.
+    injects ``first_task`` (if any) and returns. Returns True when the
+    wake succeeded AND ``first_task`` (if any) actually landed on the
+    pane; False on exception or on silent pane-submit failure. Callers
+    fall back to inbox-only delivery so the at-most-once stamp doesn't
+    swallow the task (issue #106).
     """
     try:
-        _agents.wake_persistent(
+        _, delivered = _agents.wake_persistent(
             target_agent, first_task=first_task, paths=paths,
             model=model,
         )
-        return True
+        if not delivered:
+            logger.warning(
+                "wake_persistent reached %s but inject silently failed; "
+                "falling through to inbox delivery", target_agent,
+            )
+        return delivered
     except Exception as e:
         logger.warning("wake_persistent failed for %s: %s", target_agent, e)
         return False

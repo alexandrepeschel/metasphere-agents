@@ -412,11 +412,19 @@ def wake_main(argv: list[str] | None = None) -> int:
         )
         return 1
     try:
-        rec = _agents.wake_persistent(agent, first_task=first_task)
+        rec, delivered = _agents.wake_persistent(agent, first_task=first_task)
     except ValueError as e:
         print(f"metasphere agent wake: {e}", file=sys.stderr)
         return 1
     print(f"{rec.name} awake. Attach with: tmux attach -t {rec.session_name}")
+    if first_task and not delivered:
+        print(
+            "WARNING: first-task inject did not land on the pane "
+            "(silent tmux submit failure). Re-run wake or send via "
+            "`metasphere msg send`.",
+            file=sys.stderr,
+        )
+        return 1
     return 0
 
 

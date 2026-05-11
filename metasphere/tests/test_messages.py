@@ -350,3 +350,76 @@ def test_send_message_done_hook_failure_does_not_break_delivery(tmp_paths, monke
     loaded = m.read_message(msg.path)
     assert loaded.label == "!done"
     assert loaded.from_ == "@child-eph"
+
+
+# ---------------------------------------------------------------------------
+# wake_recipient_if_live — issue #106
+# ---------------------------------------------------------------------------
+
+
+def test_wake_recipient_if_live_uses_project_scoped_session(tmp_paths, monkeypatch):
+    """Project-scoped agents have tmux sessions named
+    ``metasphere-<project>-<agent>``. The legacy
+    ``f'metasphere-{agent_name}'`` constructor missed those, silently
+    dropping inbox-mediated wakes for every research / domain agent
+    (issue #106).
+    """
+    from metasphere.agents import AgentRecord
+
+    rec = AgentRecord(
+        name="@brand-mentions",
+        scope="",
+        parent="",
+        status="",
+        spawned_at="",
+        project="research",
+    )
+    monkeypatch.setattr("metasphere.session.list_agents", lambda: [rec])
+
+    submitted: list[tuple[str, str]] = []
+
+    def fake_submit(session, body, **kwargs):
+        submitted.append((session, body))
+        return True
+
+    monkeypatch.setattr("metasphere.tmux.submit_to_tmux", fake_submit)
+
+    ok = m.wake_recipient_if_live(
+        "@brand-mentions", "!task", "@scheduler", "scan now",
+        paths=tmp_paths,
+    )
+
+    assert ok is True
+    assert submitted, "expected a tmux submit call"
+    # The bug: bare ``metasphere-brand-mentions`` misses the project-scoped
+    # session ``metasphere-research-brand-mentions``. With the fix the
+    # wake routes to the project-aware name.
+    assert submitted[0][0] == "metasphere-research-brand-mentions", (
+        f"expected project-aware session name, got {submitted[0][0]!r}"
+    )
+
+
+def test_wake_recipient_if_live_returns_false_on_submit_failure(tmp_paths, monkeypatch):
+    """When the tmux submit silently fails (session vanished mid-fire,
+    defer-if-busy abort), the function must report False so callers can
+    fall through to inbox-only delivery instead of stamping success
+    (issue #106).
+    """
+    from metasphere.agents import AgentRecord
+
+    rec = AgentRecord(
+        name="@acme",
+        scope="",
+        parent="",
+        status="",
+        spawned_at="",
+    )
+    monkeypatch.setattr("metasphere.session.list_agents", lambda: [rec])
+    monkeypatch.setattr(
+        "metasphere.tmux.submit_to_tmux", lambda *a, **k: False,
+    )
+
+    ok = m.wake_recipient_if_live(
+        "@acme", "!task", "@scheduler", "payload", paths=tmp_paths,
+    )
+    assert ok is False
