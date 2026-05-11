@@ -74,6 +74,36 @@ def test_count_user_messages_skips_tool_results(tmp_path: Path):
     assert _bc.count_user_messages(p) == 2
 
 
+def test_count_user_messages_skips_compact_summary(tmp_path: Path):
+    """Regression: Claude Code's auto-compact handler inserts a
+    ``type=='user'`` record with ``isCompactSummary: true`` and
+    ``message.content`` of the form ``"This session is being continued
+    from a previous conversation…"``. The record is NOT a real user
+    prompt — it does not fire UserPromptSubmit — but it is persisted to
+    the JSONL transcript. Counting it inflates the Stop-time count above
+    the UserPromptSubmit-time count by exactly 1 on the first turn after
+    every compaction, tripping ``count-mismatch`` and silently dropping
+    that turn's reply from Telegram. (Observed on @orchestrator across
+    2026-05: ~5 suppressions/day, each within 10 minutes of a
+    compaction.)
+    """
+    p = tmp_path / "t.jsonl"
+    _write_jsonl(
+        p,
+        [
+            {"type": "user", "message": {"content": "real prompt 1"}},
+            # The compaction marker — Claude Code's own field.
+            {
+                "type": "user",
+                "isCompactSummary": True,
+                "message": {"content": "This session is being continued from a previous conversation..."},
+            },
+            {"type": "user", "message": {"content": "real prompt 2"}},
+        ],
+    )
+    assert _bc.count_user_messages(p) == 2
+
+
 def test_count_user_messages_handles_garbage_lines(tmp_path: Path):
     p = tmp_path / "t.jsonl"
     p.write_text(

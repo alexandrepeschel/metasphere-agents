@@ -92,13 +92,23 @@ def breadcrumb_path(paths: Paths, session_id: str) -> Path:
 def count_user_messages(transcript_path: Path | str | None) -> int:
     """Count real user-prompt records in a JSONL transcript.
 
-    Both real user prompts and tool-call results are stored with
-    ``type=="user"`` by Claude Code. Tool results are distinguishable
-    by shape: ``message.content`` is a list containing a dict whose
-    own ``type`` is ``"tool_result"``. Counting them inflates the
-    Stop-time count above the UserPromptSubmit-time count by exactly
-    the number of tool calls in the turn, which trips the breadcrumb
-    ``count-mismatch`` gate on every tool-using turn.
+    Claude Code stores three distinct things under ``type == "user"``:
+
+    1. Real user prompts (what fires UserPromptSubmit).
+    2. Tool-call results — ``message.content`` is a list containing
+       a dict whose own ``type`` is ``"tool_result"``.
+    3. Auto-compact continuation summaries — records flagged with
+       ``isCompactSummary: true``. Inserted by Claude Code's
+       auto-compact handler when a session crosses the context
+       budget. These do NOT fire UserPromptSubmit but ARE persisted
+       to the transcript as ``type == "user"``.
+
+    Counting (2) or (3) inflates the Stop-time count above the
+    UserPromptSubmit-time count, tripping the breadcrumb
+    ``count-mismatch`` gate. (2) was first observed on tool-using
+    turns; (3) was the cause of the recurring suppressions seen on
+    @orchestrator across 2026-05 — every first-turn-after-compaction
+    silently dropped from Telegram.
 
     Returns 0 when the transcript is missing, empty, unreadable, or has
     no user messages — the posthook treats 0 as "no transcript info"
@@ -124,6 +134,8 @@ def count_user_messages(transcript_path: Path | str | None) -> int:
         except json.JSONDecodeError:
             continue
         if not (isinstance(obj, dict) and obj.get("type") == "user"):
+            continue
+        if obj.get("isCompactSummary") is True:
             continue
         msg = obj.get("message")
         if isinstance(msg, dict):
