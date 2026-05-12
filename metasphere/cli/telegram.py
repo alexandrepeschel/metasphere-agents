@@ -30,6 +30,11 @@ Commands:
 
 Polling lives in the metasphere-gateway systemd service; there is no
 CLI poller.
+
+Group routing: this CLI only addresses private chats. To send to a
+Telegram group, register it as a metasphere project with a topic and
+use `metasphere msg send @<project> ...` (auto-mirrors), or use
+`metasphere telegram groups send` for ad-hoc topic sends.
 """
 
 
@@ -70,8 +75,13 @@ def _reject_group_chat_id(chat_id: int) -> Optional[str]:
     if chat_id < 0:
         return (
             f"Error: refusing to send to group chat id {chat_id}. "
-            f"`metasphere telegram send` only addresses private chats; "
-            f"group routing must go through the gateway."
+            f"`metasphere telegram send` only addresses private chats. "
+            f"To reach a group, either register it as a metasphere "
+            f"project with a telegram_topic and use "
+            f"`metasphere msg send @<project> ...` (auto-mirrors), or "
+            f"use `metasphere telegram groups send` for ad-hoc topic "
+            f"sends. The guard exists because group sends through this "
+            f"CLI have caused operator-facing leaks (PR #58, 2026-05-01)."
         )
     return None
 

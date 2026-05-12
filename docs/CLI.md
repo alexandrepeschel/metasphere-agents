@@ -178,6 +178,11 @@ Commands:
 
 Polling lives in the metasphere-gateway systemd service; there is no
 CLI poller.
+
+Group routing: this CLI only addresses private chats. To send to a
+Telegram group, register it as a metasphere project with a topic and
+use `metasphere msg send @<project> ...` (auto-mirrors), or use
+`metasphere telegram groups send` for ad-hoc topic sends.
 ```
 
 ### `metasphere hooks`
