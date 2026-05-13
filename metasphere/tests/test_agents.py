@@ -189,6 +189,32 @@ class TestResolveScope:
             == tmp_paths.project_root / "scripts"
         )
 
+    def test_bare_registered_project_name_resolves_to_project_path(
+        self, tmp_paths: Paths, tmp_path: Path, monkeypatch
+    ):
+        # A bare name like "writing" that matches a registered project should
+        # resolve to that project's absolute path, not project_root/writing.
+        sibling = tmp_path / "writing"
+        sibling.mkdir()
+        proj_dir = tmp_paths.root / "projects" / "writing"
+        proj_dir.mkdir(parents=True)
+        (proj_dir / "project.json").write_text(
+            json.dumps({"path": str(sibling)})
+        )
+        monkeypatch.setattr("metasphere.agents._ms_home", lambda: tmp_paths.root)
+        assert agents._resolve_scope("writing", tmp_paths.project_root) == sibling
+
+    def test_bare_unregistered_name_resolves_under_project_root(
+        self, tmp_paths: Paths, monkeypatch
+    ):
+        # A bare name with no matching project.json falls through to the
+        # project-relative interpretation.
+        monkeypatch.setattr("metasphere.agents._ms_home", lambda: tmp_paths.root)
+        assert (
+            agents._resolve_scope("scripts", tmp_paths.project_root)
+            == tmp_paths.project_root / "scripts"
+        )
+
 
 # ---------------------------------------------------------------------------
 # spawn_ephemeral

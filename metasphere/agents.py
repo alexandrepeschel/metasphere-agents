@@ -17,6 +17,7 @@ the tmux commands and the submit call.
 from __future__ import annotations
 
 import datetime as _dt
+import json
 import os
 import shlex
 import shutil
@@ -28,7 +29,7 @@ from typing import Optional
 
 from .events import log_event
 from .io import atomic_write_text, file_lock
-from .paths import Paths, resolve
+from .paths import Paths, home as _ms_home, resolve
 from .tmux import submit_to_tmux as _tmux_submit
 
 # ---------------------------------------------------------------------------
@@ -311,6 +312,21 @@ def _resolve_scope(scope_path: str, project_root: Path) -> Path:
             return Path(str(candidate).rstrip("/"))
         s = project_root / scope_path.lstrip("/")
     else:
+        # When the bare name contains no "/" it might be a registered project
+        # name rather than a subdirectory of the current project.  Consult the
+        # project registry first so that spawn(scope="writing") from inside
+        # metasphere-agents resolves to /home/.../writing, not
+        # /home/.../metasphere-agents/writing.
+        if "/" not in scope_path:
+            proj_json = _ms_home() / "projects" / scope_path / "project.json"
+            if proj_json.is_file():
+                try:
+                    data = json.loads(proj_json.read_text())
+                    registered = data.get("path", "")
+                    if registered:
+                        return Path(str(registered).rstrip("/"))
+                except (json.JSONDecodeError, OSError):
+                    pass
         s = project_root / scope_path
     return Path(str(s).rstrip("/"))
 
