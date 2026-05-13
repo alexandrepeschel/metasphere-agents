@@ -71,10 +71,9 @@ def test_resolve_target_agent_uses_agent_id():
 
     Pre-2026-04-30, the function had hardcoded prefix-match branches
     that overrode ``agent_id``. Those are gone. Callers wire the
-    target via the ``agent_id`` field; the legacy spot-side migration
-    in ``scripts/migrate_schedule_agent_ids.py`` rewrote the 16
-    affected jobs to set explicit ``agent_id`` values matching their
-    historical resolution.
+    target via the ``agent_id`` field; live jobs.json files were
+    migrated to carry the resolved ``agent_id`` directly so the
+    simplification was behavior-preserving.
     """
     assert _sched.resolve_target_agent(
         _make_job(name="research-monitor:brand-mentions",
@@ -388,9 +387,8 @@ from metasphere.cli.wire_exit_self import (
 )
 
 # A representative set of job names for the per-job-flag tests. The
-# full historical list of 12 spot-deployed jobs lives in
-# scripts/migrate_schedule_exit_self_flag.py for the one-time migration
-# only; here we just need a few names to exercise the contract.
+# contract is now "any job with wants_exit_self_cleanup=True"; here we
+# just need a few names to exercise it.
 _SAMPLE_FLAGGED_NAMES: tuple[str, ...] = (
     "Morning briefing",
     "rage-changelog-update",

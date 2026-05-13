@@ -94,11 +94,8 @@ external daemon/tool, not re-invoking a bash script of ours).
 
 ```
 scripts/
-├── metasphere-reaper                       # bash: npm-root-g zombie reaper (see docs/OPS.md)
-├── migrate_schedule_agent_ids.py           # one-shot schedule-agent-id migration
-├── migrate_schedule_exit_self_flag.py      # one-shot schedule exit-self flag migration
-├── migrate_task_frontmatter.py             # one-shot task frontmatter migration
-└── test_metasphere_reaper.sh               # functional test for the reaper
+├── metasphere-reaper           # bash: npm-root-g zombie reaper (see docs/OPS.md)
+└── test_metasphere_reaper.sh   # functional test for the reaper
 ```
 
 No bash entry points for the CLI itself. `scripts/metasphere` and its

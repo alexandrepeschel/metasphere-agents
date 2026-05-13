@@ -217,10 +217,8 @@ def resolve_target_agent(job: Job) -> str:
 
     Pre-2026-04-30 versions of this function had hardcoded
     prefix-match branches that overrode ``agent_id`` for specific
-    job-name prefixes. Those are removed; the migration in
-    ``scripts/migrate_schedule_agent_ids.py`` rewrites legacy
-    ``agent_id="main"`` jobs to their resolved targets so the
-    simplification is behavior-preserving.
+    job-name prefixes; those are removed and live jobs.json files
+    were migrated to carry the resolved ``agent_id`` directly.
     """
     return "@" + (job.agent_id or "main")
 
