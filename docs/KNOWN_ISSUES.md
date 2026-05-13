@@ -56,12 +56,11 @@ the line — history is signal). Newest at top of each section.
 
 ## Normal
 
-- [ ] **Bare-name `scope` in `spawn_ephemeral` resolves under project_root** — passing a bare project name as `scope_path` (e.g. `"writing"`, `"metasphere-agents"`) takes the `else` branch in `_resolve_scope` and becomes `<project_root>/<bare-name>`, so the agent's scope sidecar + the scaffold mkdir at `agents.py:358-361` land inside the spawning project's working tree instead of the intended sibling project. Result: empty `.tasks/{active,completed}` + `.messages/{inbox,outbox}` stubs accumulate in-repo, and any tasks/messages the agent emits route to the wrong scope.
+- [x] **Bare-name `scope` in `spawn_ephemeral` resolves under project_root** — passing a bare project name as `scope_path` (e.g. `"writing"`, `"metasphere-agents"`) takes the `else` branch in `_resolve_scope` and becomes `<project_root>/<bare-name>`, so the agent's scope sidecar + the scaffold mkdir at `agents.py:358-361` land inside the spawning project's working tree instead of the intended sibling project. Result: empty `.tasks/{active,completed}` + `.messages/{inbox,outbox}` stubs accumulate in-repo, and any tasks/messages the agent emits route to the wrong scope.
       Where: `metasphere/agents.py:289` (`_resolve_scope`) — the `else: s = project_root / scope_path` branch can't disambiguate "bare project name" from "subdirectory of this project."
       Repro: spawn an ephemeral with `scope="writing"` (or any registered project name) from inside `metasphere-agents`; observe `<repo>/writing/.tasks/active/` etc. get created.
       Cleanup: empty stubs at `metasphere-agents/{metasphere-agents,writing}/` removed by @explorer 2026-05-13 (rmdir, gitignored, no-op for git).
-      Fix candidate: when `scope_path` contains no `/`, consult the project registry first; if it names a registered project, return that project's absolute path. Falls back to the current relative semantics otherwise. Add a test covering both ambiguity directions (bare name that IS a project vs bare name that ISN'T).
-      Notes: lower-urgency than it looks — the empty stubs are gitignored, and there's no current evidence of an agent actually committing work to a wrong-scope path (grep of `~/.metasphere/agents/*/scope` found zero stale references to the cleaned dirs). But the semantics are wrong and a future bigger refactor will trip on it.
+      Resolved: `_resolve_scope` now checks `~/.metasphere/projects/<name>/project.json` before falling through to the project-relative path. Both ambiguity directions covered by `TestResolveScope`. Shipped b549761 (2026-05-13).
 
 - [x] **Memory maintenance not encoded in CLAUDE.md** — there's no explicit protocol telling the orchestrator when to prune `LEARNINGS.md`, rotate `HEARTBEAT.md`, summarize old daily logs, etc.
       Fix: "Memory Hygiene" section landed in CLAUDE.md with a file/cadence/action table covering LEARNINGS, HEARTBEAT, MISSION, SOUL/IDENTITY, daily logs.
