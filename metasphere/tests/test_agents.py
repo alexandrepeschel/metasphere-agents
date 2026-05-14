@@ -385,6 +385,49 @@ def test_wake_persistent_cold_start_runs_tmux_new_session(tmp_paths: Paths):
     assert "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1" in env_line
 
 
+def test_wake_persistent_cold_start_refreshes_last_active(tmp_paths: Paths):
+    """Cold-starting a persistent agent must refresh its ``last_active``
+    sidecar. ``reap_dormant`` reads that file (preferring it over tmux
+    activity) to decide whether a session has gone idle past
+    ``dormancy_max_idle_seconds``. If wake_persistent leaves a stale
+    sidecar in place, the just-woken session gets reaped within a single
+    dormancy interval — the exact regression 6b05ad5 closed for the
+    @writing-lead wake on 2026-05-14.
+    """
+    d = _make_persistent(tmp_paths)
+    # Seed a stale last_active that would trip reap_dormant immediately.
+    stale = "2020-01-01T00:00:00+00:00"
+    (d / "last_active").write_text(stale)
+
+    def fake_run(cmd, *args, **kwargs):
+        cp = MagicMock()
+        if "has-session" in cmd:
+            cp.returncode = 1
+            cp.stdout = ""
+        elif "capture-pane" in cmd:
+            cp.returncode = 0
+            cp.stdout = "bypass permissions on"
+        else:
+            cp.returncode = 0
+            cp.stdout = ""
+        cp.stderr = ""
+        return cp
+
+    with patch("metasphere.agents.subprocess.run", side_effect=fake_run):
+        agents.wake_persistent("@waker", paths=tmp_paths)
+
+    refreshed = (d / "last_active").read_text().strip()
+    assert refreshed != stale, (
+        "wake_persistent cold-start must touch last_active; stale value "
+        "left in place would let reap_dormant kill the just-woken session"
+    )
+    # Idle should now be near-zero, well under any sane reap threshold.
+    idle = agents._last_active_idle_seconds(d)
+    assert idle is not None and idle < 60, (
+        f"expected fresh idle (<60s) post-wake, got {idle!r}"
+    )
+
+
 def test_wake_persistent_project_scoped_uses_project_cwd(tmp_paths: Paths, tmp_path: Path):
     # When a project-scoped agent has no explicit `scope` file but its
     # `project` file names a registered project, the tmux new-session
