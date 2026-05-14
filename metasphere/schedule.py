@@ -356,9 +356,16 @@ def dispatch_command(
             timeout=timeout,
         )
         if proc.returncode != 0:
+            # Stderr is the conventional diagnostic surface, but some
+            # failures write to stdout instead (or to nowhere at all);
+            # surface whichever is non-empty so silent-fail entries
+            # like "exited 1: " stop showing up in schedule.log.
+            stderr = (proc.stderr or "").strip()
+            stdout = (proc.stdout or "").strip()
+            detail = stderr or stdout or "(no output)"
             logger.warning(
                 "dispatch_command: %s exited %d: %s",
-                argv[0], proc.returncode, (proc.stderr or "").strip()[:200],
+                shlex.join(argv), proc.returncode, detail[:200],
             )
         return proc.returncode == 0
     except Exception as e:  # pragma: no cover - defensive

@@ -379,6 +379,69 @@ def test_dispatch_command_does_not_wake_for_non_send_command(tmp_paths):
     wake_mock.assert_not_called()
 
 
+# ---------- dispatch_command: failure-diagnostic surfacing ----------
+
+
+def test_dispatch_command_failure_logs_full_argv_and_stdout_fallback(
+    tmp_paths, caplog
+):
+    """Non-zero exit must surface (a) the full argv, not just argv[0],
+    and (b) stdout when stderr is empty — fixes the silent
+    `exited 1: ` entries that accumulated in schedule.log when the
+    failing process wrote diagnostic to stdout."""
+    import logging
+
+    caplog.set_level(logging.WARNING, logger="metasphere.schedule")
+    with mock.patch("metasphere.schedule.subprocess.run") as run_mock:
+        run_mock.return_value = mock.Mock(
+            returncode=1, stdout="cli error: bad flag", stderr=""
+        )
+        ok = _sched.dispatch_command(
+            "/usr/bin/metasphere agents list --busted-flag", paths=tmp_paths
+        )
+
+    assert ok is False
+    msgs = [r.getMessage() for r in caplog.records]
+    assert any(
+        "/usr/bin/metasphere agents list --busted-flag" in m
+        and "cli error: bad flag" in m
+        for m in msgs
+    ), msgs
+
+
+def test_dispatch_command_failure_logs_no_output_marker(tmp_paths, caplog):
+    """If both stderr and stdout are empty, the warning must still
+    name the failure with a `(no output)` marker rather than render
+    as a bare `exited 1: ` line that gives operators nothing to act
+    on."""
+    import logging
+
+    caplog.set_level(logging.WARNING, logger="metasphere.schedule")
+    with mock.patch("metasphere.schedule.subprocess.run") as run_mock:
+        run_mock.return_value = mock.Mock(returncode=2, stdout="", stderr="")
+        ok = _sched.dispatch_command("/bin/false", paths=tmp_paths)
+
+    assert ok is False
+    assert any("(no output)" in r.getMessage() for r in caplog.records)
+
+
+def test_dispatch_command_failure_prefers_stderr(tmp_paths, caplog):
+    """Stderr is the conventional diagnostic surface; when both
+    streams have content, stderr wins."""
+    import logging
+
+    caplog.set_level(logging.WARNING, logger="metasphere.schedule")
+    with mock.patch("metasphere.schedule.subprocess.run") as run_mock:
+        run_mock.return_value = mock.Mock(
+            returncode=1, stdout="stdout-msg", stderr="stderr-msg"
+        )
+        _sched.dispatch_command("/bin/false", paths=tmp_paths)
+
+    msgs = [r.getMessage() for r in caplog.records]
+    assert any("stderr-msg" in m for m in msgs)
+    assert not any("stdout-msg" in m for m in msgs)
+
+
 # ---------- wire-exit-self migration tool ----------
 
 from metasphere.cli.wire_exit_self import (
