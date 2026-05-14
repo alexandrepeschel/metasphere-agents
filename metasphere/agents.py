@@ -735,6 +735,7 @@ def wake_persistent(
 
     _atomic_meta_write(agent_dir, "status", "active: persistent session")
     _atomic_meta_write(agent_dir, "spawned_at", _utcnow())
+    touch_last_active(agent_id, paths)  # prevent reap_dormant from killing a just-woken session
 
     log_event(
         "agent.session",
