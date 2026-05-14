@@ -38,4 +38,8 @@ ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 pids_str="${pids_killed[*]:-}"
 line="${ts} metasphere-reaper killed=${killed} pids=${pids_str}"
 echo "$line"
-printf '%s\n' "$line" >> "$LOG_FILE" 2>/dev/null || true
+# Only persist actionable runs to the log file. Liveness still goes to
+# the journal via stdout above; the log file is what ops grep.
+if (( killed > 0 )); then
+    printf '%s\n' "$line" >> "$LOG_FILE" 2>/dev/null || true
+fi
