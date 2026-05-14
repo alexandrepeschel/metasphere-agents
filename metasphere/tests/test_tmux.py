@@ -445,6 +445,89 @@ def test_submit_defer_if_busy_default_false_ignores_typing(monkeypatch):
     )
 
 
+def test_submit_defer_coalesces_repeat_typing(monkeypatch, capsys):
+    """Heartbeat fires every 5 minutes; if the operator is typing, every
+    tick defers and used to emit an identical log line. Over a multi-hour
+    typing session that's hundreds of identical lines drowning the
+    heartbeat log. The defer log should fire once per session per
+    continuous typing-period (state-transition logging), not once per
+    deferred call."""
+    T._deferring_sessions.discard("sess")
+
+    def fake_run(argv, **kw):
+        if "has-session" in argv:
+            return _fake_cp(returncode=0)
+        if "capture-pane" in argv:
+            return _fake_cp(stdout=_pane(["❯ still-typing"]))
+        return _fake_cp(returncode=0)
+
+    monkeypatch.setattr("subprocess.run", fake_run)
+    monkeypatch.setattr(T, "_find_tmux", lambda: "/usr/bin/tmux")
+
+    for _ in range(5):
+        assert T.submit_to_tmux(
+            "sess", "tick", defer_if_busy=True
+        ) is False
+
+    err = capsys.readouterr().err
+    defer_lines = [
+        ln for ln in err.splitlines()
+        if "defer: input has typing in sess" in ln
+    ]
+    assert len(defer_lines) == 1, (
+        f"expected one defer log across 5 ticks, got {len(defer_lines)}"
+    )
+
+
+def test_submit_defer_logs_again_after_successful_submit(monkeypatch, capsys):
+    """After the user stops typing and a heartbeat actually lands, the
+    next typing-period must log defer again — operators rely on the
+    line to spot when an inject got skipped. Successful submit clears
+    the suppression flag."""
+    T._deferring_sessions.discard("sess")
+    state = {"typed": True}
+
+    def fake_run(argv, **kw):
+        if "has-session" in argv:
+            return _fake_cp(returncode=0)
+        if "capture-pane" in argv:
+            content = ["❯ mid-typing"] if state["typed"] else ["❯ "]
+            return _fake_cp(stdout=_pane(content))
+        return _fake_cp(returncode=0)
+
+    monkeypatch.setattr("subprocess.run", fake_run)
+    monkeypatch.setattr(T, "_find_tmux", lambda: "/usr/bin/tmux")
+
+    # Call 1: typing → defer + log.
+    assert T.submit_to_tmux(
+        "sess", "tick", defer_if_busy=True
+    ) is False
+    # Call 2: still typing → defer + SUPPRESSED (no new log).
+    assert T.submit_to_tmux(
+        "sess", "tick", defer_if_busy=True
+    ) is False
+    # User stops typing — successful submit clears the suppression flag.
+    state["typed"] = False
+    assert T.submit_to_tmux(
+        "sess", "tick", defer_if_busy=True
+    ) is True
+    # User starts typing again — defer must log a second time.
+    state["typed"] = True
+    assert T.submit_to_tmux(
+        "sess", "tick", defer_if_busy=True
+    ) is False
+
+    err = capsys.readouterr().err
+    defer_lines = [
+        ln for ln in err.splitlines()
+        if "defer: input has typing in sess" in ln
+    ]
+    assert len(defer_lines) == 2, (
+        f"expected two defer logs separated by a successful submit, "
+        f"got {len(defer_lines)}: {defer_lines}"
+    )
+
+
 # --- Enter-race post-submit verification (2026-04-16 P0) -------------------
 #
 # Before this fix: submit_to_tmux returned True as long as no

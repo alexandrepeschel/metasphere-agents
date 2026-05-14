@@ -20,6 +20,16 @@ import sys
 import time
 
 
+# Sessions for which we already logged a "defer: input has typing"
+# line. The heartbeat fires every 5 minutes; without this gate, a single
+# multi-hour typing session in the orchestrator pane produces hundreds
+# of identical defer lines and drowns the heartbeat log (~50% noise was
+# the steady state). We log on the transition into the deferred state
+# and stay silent until a successful submit clears the flag — so the
+# next deferred heartbeat after the user stops typing logs again.
+_deferring_sessions: set[str] = set()
+
+
 def _find_tmux() -> str | None:
     """Locate the tmux binary."""
     return shutil.which("tmux")
@@ -192,10 +202,12 @@ def submit_to_tmux(
             return False
 
         if defer_if_busy and _input_line_has_typing(tmux, session):
-            print(
-                f"[tmux.submit] defer: input has typing in {session}",
-                file=sys.stderr,
-            )
+            if session not in _deferring_sessions:
+                print(
+                    f"[tmux.submit] defer: input has typing in {session}",
+                    file=sys.stderr,
+                )
+                _deferring_sessions.add(session)
             return False
 
         # Pre-flush C-m: if the input box has legit pending content
@@ -333,6 +345,7 @@ def submit_to_tmux(
             time.sleep(0.5)
             if (not _has_pending_paste(tmux, session)
                     and not _input_line_has_typing(tmux, session)):
+                _deferring_sessions.discard(session)
                 return True
 
         # 12s elapsed and the input is still dirty. Don't fire a recovery
