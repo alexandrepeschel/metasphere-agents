@@ -26,8 +26,8 @@ def summary() -> str:
         tasks = list_tasks(paths.scope, paths.project_root)
         active = [t for t in tasks if t.status in ("pending", "in-progress", "in_progress")]
         lines.append(f"\nTasks: {len(active)} active")
-    except Exception:
-        lines.append("\nTasks: (unavailable)")
+    except Exception as exc:
+        lines.append(f"\nTasks: (unavailable: {type(exc).__name__}: {exc})")
 
     # Schedule
     try:
@@ -36,8 +36,8 @@ def summary() -> str:
         jobs = list_jobs(paths)
         enabled = [j for j in jobs if getattr(j, "enabled", True)]
         lines.append(f"Schedule: {len(enabled)} jobs enabled")
-    except Exception:
-        lines.append("Schedule: (unavailable)")
+    except Exception as exc:
+        lines.append(f"Schedule: (unavailable: {type(exc).__name__}: {exc})")
 
     # Projects
     try:
@@ -46,8 +46,8 @@ def summary() -> str:
         projects = list_projects(paths=paths)
         initialized = [p for p in projects if p.status != "missing"]
         lines.append(f"Projects: {len(initialized)} initialized")
-    except Exception:
-        lines.append("Projects: (unavailable)")
+    except Exception as exc:
+        lines.append(f"Projects: (unavailable: {type(exc).__name__}: {exc})")
 
     # Gateway
     try:
@@ -58,7 +58,7 @@ def summary() -> str:
             lines.append(f"\nOrchestrator: alive (idle {idle}s)")
         else:
             lines.append("\nOrchestrator: not running")
-    except Exception:
-        lines.append("\nOrchestrator: (status unavailable)")
+    except Exception as exc:
+        lines.append(f"\nOrchestrator: (status unavailable: {type(exc).__name__}: {exc})")
 
     return "\n".join(lines)
