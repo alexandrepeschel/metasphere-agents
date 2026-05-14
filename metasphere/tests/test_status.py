@@ -36,3 +36,41 @@ def test_summary_surfaces_exception_diagnostic(tmp_paths, monkeypatch):
     out = status.summary()
 
     assert "Tasks: (unavailable: TypeError: simulated wiring breakage)" in out
+
+
+def test_summary_reports_daemon_health(tmp_paths, monkeypatch):
+    """Daemon block surfaces per-daemon active/inactive state. Operators
+    rely on it to spot a silently dead heartbeat or schedule daemon —
+    the REPL keeps looking healthy in those cases, so the daemon block
+    is the only signal."""
+
+    def fake_health():
+        return {
+            "metasphere-heartbeat": True,
+            "metasphere-gateway": True,
+            "metasphere-schedule": False,
+        }
+
+    monkeypatch.setattr("metasphere.cli.restart.daemon_health", fake_health)
+
+    out = status.summary()
+
+    assert "Daemons:" in out
+    assert "● metasphere-heartbeat: active" in out
+    assert "● metasphere-gateway: active" in out
+    assert "○ metasphere-schedule: inactive" in out
+
+
+def test_summary_surfaces_daemon_exception(tmp_paths, monkeypatch):
+    """Same silent-fail guard as the tasks subsystem: if daemon_health
+    blows up, the diagnostic must reach the rendered output instead of
+    rendering as bare ``(unavailable)``."""
+
+    def boom():
+        raise RuntimeError("systemctl missing")
+
+    monkeypatch.setattr("metasphere.cli.restart.daemon_health", boom)
+
+    out = status.summary()
+
+    assert "Daemons: (unavailable: RuntimeError: systemctl missing)" in out

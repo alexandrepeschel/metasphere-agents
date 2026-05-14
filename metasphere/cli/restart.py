@@ -60,6 +60,19 @@ def _restart_daemon(name: str) -> bool:
     return _systemctl("restart", name) == 0
 
 
+def daemon_health() -> dict[str, bool]:
+    """Return ``{daemon_name: is_active}`` for the three systemd user
+    services that back the harness. A daemon shows ``False`` when
+    ``systemctl --user is-active`` returns non-zero (inactive, failed,
+    or unknown) or when systemctl is missing entirely.
+
+    Used by ``metasphere status`` so a silently dead heartbeat or
+    schedule daemon surfaces to the operator instead of hiding behind
+    a healthy-looking REPL.
+    """
+    return {d: _systemctl("is-active", "--quiet", d) == 0 for d in _DAEMONS}
+
+
 def _restart_systemd_daemons() -> dict[str, bool]:
     """Restart all three daemons. Return ``{name: ok}``."""
     return {d: _restart_daemon(d) for d in _DAEMONS}

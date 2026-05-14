@@ -61,4 +61,19 @@ def summary() -> str:
     except Exception as exc:
         lines.append(f"\nOrchestrator: (status unavailable: {type(exc).__name__}: {exc})")
 
+    # Daemons (systemd user services). A dead heartbeat or schedule
+    # daemon is a silent failure mode otherwise — the REPL keeps
+    # looking healthy while no ticks fire.
+    try:
+        from .cli.restart import daemon_health
+
+        health = daemon_health()
+        lines.append("\nDaemons:")
+        for name, active in health.items():
+            mark = "●" if active else "○"
+            state = "active" if active else "inactive"
+            lines.append(f"  {mark} {name}: {state}")
+    except Exception as exc:
+        lines.append(f"\nDaemons: (unavailable: {type(exc).__name__}: {exc})")
+
     return "\n".join(lines)
