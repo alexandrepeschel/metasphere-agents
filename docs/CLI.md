@@ -36,7 +36,7 @@ Subcommands:
   project               Create, list, and manage projects + their member agents.
   gateway               Gateway daemon control + Telegram injection helpers.
   daemon                Start/stop/restart/status the three metasphere systemd services.
-  logs                  Tail gateway / heartbeat / schedule / events logs.
+  logs                  Tail gateway / heartbeat / schedule / reaper / events logs.
   config                Bootstrap Telegram bot token + chat id (interactive or flag-driven).
   restart               Restart all daemons + alive agent tmux sessions (or one agent).
   update                Run the metasphere self-update flow (or manage its cron job).
@@ -440,7 +440,7 @@ boot-dependency order (gateway, heartbeat, schedule).
 
 ### `metasphere logs`
 
-Tail gateway / heartbeat / schedule / events logs.
+Tail gateway / heartbeat / schedule / reaper / events logs.
 
 ```
 Usage: metasphere logs <service> [--lines N] [-f]
@@ -449,6 +449,7 @@ Services:
   gateway     ~/.metasphere/logs/gateway.log
   heartbeat   ~/.metasphere/logs/heartbeat.log
   schedule    ~/.metasphere/logs/schedule.log
+  reaper      ~/.metasphere/logs/reaper.log
   events      Today's ~/.metasphere/events/events-YYYY-MM-DD.jsonl
               (pretty-printed JSON, one record per line).
 

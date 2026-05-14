@@ -15,6 +15,14 @@ def test_service_path_resolves_gateway_to_logs_dir(tmp_paths):
     assert p == tmp_paths.logs / "gateway.log"
 
 
+def test_service_path_resolves_reaper_to_logs_dir(tmp_paths):
+    # reaper.log is grep-friendly after e792a9c (only actionable runs
+    # append). Operators reach it via ``metasphere logs reaper`` just
+    # like the persistent daemons.
+    p = L._service_path("reaper", tmp_paths)
+    assert p == tmp_paths.logs / "reaper.log"
+
+
 def test_service_path_events_routes_to_dated_jsonl(tmp_paths):
     p = L._service_path("events", tmp_paths)
     assert "events-" in p.name
