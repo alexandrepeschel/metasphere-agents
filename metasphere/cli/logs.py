@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-DESCRIPTION = "Tail gateway / heartbeat / schedule / reaper / posthook / events logs."
+DESCRIPTION = "Tail gateway / heartbeat / schedule / reaper / posthook / update / events logs."
 
 USAGE = """\
 Usage: metasphere logs <service> [--lines N] [-f]
@@ -13,6 +13,7 @@ Services:
   schedule    ~/.metasphere/logs/schedule.log
   reaper      ~/.metasphere/logs/reaper.log
   posthook    ~/.metasphere/logs/posthook-suppressions.log
+  update      ~/.metasphere/logs/auto-update.log
   events      Today's ~/.metasphere/events/events-YYYY-MM-DD.jsonl
               (pretty-printed JSON, one record per line).
 
@@ -35,7 +36,7 @@ from typing import List, Optional
 from metasphere.paths import resolve
 
 
-SERVICES = ("gateway", "heartbeat", "schedule", "reaper", "posthook", "events")
+SERVICES = ("gateway", "heartbeat", "schedule", "reaper", "posthook", "update", "events")
 
 
 def _service_path(which: str, paths) -> Path:
@@ -43,6 +44,8 @@ def _service_path(which: str, paths) -> Path:
         return paths.events_log
     if which == "posthook":
         return paths.logs / "posthook-suppressions.log"
+    if which == "update":
+        return paths.logs / "auto-update.log"
     return paths.logs / f"{which}.log"
 
 

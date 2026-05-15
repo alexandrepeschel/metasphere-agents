@@ -440,7 +440,8 @@ boot-dependency order (gateway, heartbeat, schedule).
 
 ### `metasphere logs`
 
-Tail gateway / heartbeat / schedule / reaper / posthook / events logs.
+Tail gateway / heartbeat / schedule / reaper / posthook / update /
+events logs.
 
 ```
 Usage: metasphere logs <service> [--lines N] [-f]
@@ -451,6 +452,7 @@ Services:
   schedule    ~/.metasphere/logs/schedule.log
   reaper      ~/.metasphere/logs/reaper.log
   posthook    ~/.metasphere/logs/posthook-suppressions.log
+  update      ~/.metasphere/logs/auto-update.log
   events      Today's ~/.metasphere/events/events-YYYY-MM-DD.jsonl
               (pretty-printed JSON, one record per line).
 

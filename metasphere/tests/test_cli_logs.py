@@ -32,6 +32,15 @@ def test_service_path_resolves_posthook_to_suppressions_log(tmp_paths):
     assert p == tmp_paths.logs / "posthook-suppressions.log"
 
 
+def test_service_path_resolves_update_to_auto_update_log(tmp_paths):
+    # metasphere.update writes to auto-update.log (LOG_FILENAME in
+    # update.py). The CLI alias is ``update`` to match the subsystem
+    # name (``metasphere update`` is the opt-in upgrade entrypoint),
+    # not the on-disk filename.
+    p = L._service_path("update", tmp_paths)
+    assert p == tmp_paths.logs / "auto-update.log"
+
+
 def test_service_path_events_routes_to_dated_jsonl(tmp_paths):
     p = L._service_path("events", tmp_paths)
     assert "events-" in p.name
