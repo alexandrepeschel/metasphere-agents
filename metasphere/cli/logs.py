@@ -5,7 +5,7 @@ from __future__ import annotations
 DESCRIPTION = "Tail gateway / heartbeat / schedule / reaper / posthook / update / events logs."
 
 USAGE = """\
-Usage: metasphere logs <service> [--lines N] [-f]
+Usage: metasphere logs [<service>] [--lines N] [-f]
 
 Services:
   gateway     ~/.metasphere/logs/gateway.log
@@ -22,6 +22,7 @@ Options:
   -f, --follow      Follow appended output (like `tail -f`).
 
 Without -f, the command prints the last N lines and exits.
+Without a service, prints an index of all logs with their last-write age.
 """
 
 
@@ -121,6 +122,33 @@ def _header_line(path: Path, *, now: Optional[float] = None) -> str:
     return f"# {path.name} — last write {ts} ({age})"
 
 
+def _index(paths, *, now: Optional[float] = None) -> List[str]:
+    """One row per service: ``<name>  <age>  <path-or-marker>``.
+
+    Mirrors the freshness header but for every known log at once, so an
+    operator running ``metasphere logs`` with no args sees which logs
+    exist and which are fresh before drilling into one.
+    """
+    width = max(len(s) for s in SERVICES)
+    rows: List[str] = []
+    for svc in SERVICES:
+        path = _service_path(svc, paths)
+        if path.is_file():
+            try:
+                mtime = path.stat().st_mtime
+            except OSError:
+                age = "--"
+                disp = "(stat failed)"
+            else:
+                age = _format_age((now if now is not None else time.time()) - mtime)
+                disp = str(path)
+        else:
+            age = "--"
+            disp = "(no log yet)"
+        rows.append(f"  {svc:<{width}}  {age:<10}  {disp}")
+    return rows
+
+
 def _render(lines: List[str], *, is_events: bool) -> None:
     for ln in lines:
         if is_events:
@@ -175,8 +203,8 @@ def main(argv: Optional[List[str]] = None) -> int:
         "--user-unit`` for the common debugging case.",
     )
     parser.add_argument(
-        "service", choices=SERVICES,
-        help=f"Which log: {', '.join(SERVICES)}.",
+        "service", choices=SERVICES, nargs="?",
+        help=f"Which log: {', '.join(SERVICES)}. Omit to list all.",
     )
     parser.add_argument("--lines", "-n", type=int, default=50,
                         help="Initial tail size (default 50).")
@@ -185,6 +213,13 @@ def main(argv: Optional[List[str]] = None) -> int:
     args = parser.parse_args(args_list)
 
     paths = resolve()
+
+    if args.service is None:
+        for row in _index(paths):
+            print(row)
+        print("\nUse `metasphere logs <service>` to tail one.")
+        return 0
+
     path = _service_path(args.service, paths)
     is_events = args.service == "events"
 

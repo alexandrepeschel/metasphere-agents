@@ -135,6 +135,41 @@ def test_header_line_when_stat_fails(tmp_path):
     assert line == "# missing.log — (stat failed)"
 
 
+def test_index_renders_age_and_path_for_existing_log(tmp_paths):
+    tmp_paths.logs.mkdir(exist_ok=True)
+    log = tmp_paths.logs / "gateway.log"
+    log.write_text("x\n")
+    mtime = log.stat().st_mtime
+    rows = L._index(tmp_paths, now=mtime + 5)
+    gateway_row = next(r for r in rows if r.lstrip().startswith("gateway "))
+    assert "5s ago" in gateway_row
+    assert str(log) in gateway_row
+
+
+def test_index_marks_missing_logs(tmp_paths):
+    # posthook-suppressions.log only exists when posthook.py has fired
+    # a suppression. Index should show "(no log yet)" rather than a
+    # confusing "0s ago" or a stat error.
+    tmp_paths.logs.mkdir(exist_ok=True)
+    rows = L._index(tmp_paths)
+    posthook_row = next(r for r in rows if r.lstrip().startswith("posthook "))
+    assert "--" in posthook_row
+    assert "(no log yet)" in posthook_row
+
+
+def test_cli_no_args_prints_index(tmp_paths, capsys):
+    tmp_paths.logs.mkdir(exist_ok=True)
+    (tmp_paths.logs / "schedule.log").write_text("ok\n")
+    rc = L.main([])
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "schedule" in out
+    assert "gateway" in out
+    assert "events" in out
+    # Footer hint is part of the index UX, not a log line.
+    assert "metasphere logs <service>" in out
+
+
 def test_cli_prints_header_to_stderr(tmp_paths, capsys):
     # Header is informational, not part of the log content — it goes to
     # stderr so pipelines (`metasphere logs schedule | grep foo`) stay

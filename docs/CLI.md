@@ -443,7 +443,7 @@ boot-dependency order (gateway, heartbeat, schedule).
 Tail gateway / heartbeat / schedule / reaper / posthook / update / events logs.
 
 ```
-Usage: metasphere logs <service> [--lines N] [-f]
+Usage: metasphere logs [<service>] [--lines N] [-f]
 
 Services:
   gateway     ~/.metasphere/logs/gateway.log
@@ -460,6 +460,7 @@ Options:
   -f, --follow      Follow appended output (like `tail -f`).
 
 Without -f, the command prints the last N lines and exits.
+Without a service, prints an index of all logs with their last-write age.
 ```
 
 ### `metasphere config`
