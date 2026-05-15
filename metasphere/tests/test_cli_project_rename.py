@@ -108,3 +108,18 @@ def test_cli_rename_missing_args(tmp_paths: Paths, capsys):
     _, err = capsys.readouterr()
     assert rc == 2
     assert "Usage" in err
+
+
+def test_cli_init_help_flag_does_not_register(tmp_paths: Paths):
+    """``metasphere project init --help`` previously slipped through
+    as ``init_project(path=Path('--help'))`` and polluted projects.json
+    with a ghost ``--help`` entry. Argparse intercepts ``--help`` now
+    so the CLI raises SystemExit(0) and writes nothing.
+    """
+    registry = tmp_paths.root / "projects.json"
+    before = registry.read_text() if registry.is_file() else ""
+    with pytest.raises(SystemExit) as exc:
+        _cli_proj._cmd_init(["--help"], tmp_paths)
+    assert exc.value.code == 0
+    after = registry.read_text() if registry.is_file() else ""
+    assert before == after

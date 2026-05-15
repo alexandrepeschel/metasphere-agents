@@ -75,7 +75,7 @@ def _cmd_new(rest: list[str], paths) -> int:
             ns.name, path=ns.path, goal=ns.goal, repo=ns.repo,
             members=members, paths=paths,
         )
-    except FileExistsError as e:
+    except (FileExistsError, ValueError) as e:
         print(str(e), file=sys.stderr)
         return 2
     print(f"Created project: {proj.name}")
@@ -92,8 +92,16 @@ def _cmd_new(rest: list[str], paths) -> int:
 
 def _cmd_init(rest: list[str], paths) -> int:
     from metasphere.project import init_project
-    target = Path(rest[0]) if rest else Path.cwd()
-    p = init_project(path=target, paths=paths)
+    ap = argparse.ArgumentParser(prog="metasphere project init")
+    ap.add_argument("path", nargs="?", type=Path, default=None,
+                    help="Project directory to initialize (default: cwd).")
+    ns = ap.parse_args(rest)
+    target = ns.path if ns.path is not None else Path.cwd()
+    try:
+        p = init_project(path=target, paths=paths)
+    except ValueError as e:
+        print(str(e), file=sys.stderr)
+        return 2
     print(f"Initialized project: {p.name}")
     print(f"  Path: {p.path}")
     return 0

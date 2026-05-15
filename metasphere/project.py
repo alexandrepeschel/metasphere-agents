@@ -288,6 +288,29 @@ def save_project(project: Project, *, paths: Optional[Paths] = None) -> Path:
 _NAME_INVALID_RE = re.compile(r"[/\\\x00]")
 
 
+def _validate_name(name: str) -> None:
+    """Raise ``ValueError`` if ``name`` would be unsafe to register.
+
+    Rejects empty strings, names starting with ``-`` (a leading dash is
+    almost always a CLI flag that leaked into a positional — e.g.
+    ``metasphere project init --help`` was previously interpreted as a
+    project path named ``--help``), and names containing path
+    separators or null bytes.
+    """
+    if not name:
+        raise ValueError("project name must be non-empty")
+    if name.startswith("-"):
+        raise ValueError(
+            f"invalid project name: {name!r} "
+            f"(must not start with '-' — looks like a CLI flag)"
+        )
+    if _NAME_INVALID_RE.search(name):
+        raise ValueError(
+            f"invalid project name: {name!r} "
+            f"(must not contain /, \\, or null)"
+        )
+
+
 def rename_project(
     old_name: str,
     new_name: str,
@@ -307,11 +330,7 @@ def rename_project(
     """
     paths = paths or resolve()
 
-    if _NAME_INVALID_RE.search(new_name):
-        raise ValueError(
-            f"invalid project name: {new_name!r} "
-            f"(must not contain /, \\, or null)"
-        )
+    _validate_name(new_name)
 
     # Noop case: same name
     if old_name == new_name:
@@ -490,6 +509,7 @@ def init_project(
     paths = paths or resolve()
     p = Path(path).resolve() if path else Path.cwd().resolve()
     name = name or p.name
+    _validate_name(name)
 
     _ensure_scaffold(p, paths=paths, project_name=name)
 
@@ -561,6 +581,7 @@ def new_project(
         doesn't already exist.
     """
     paths = paths or resolve()
+    _validate_name(name)
     p = Path(path).resolve() if path else (Path.cwd() / name).resolve()
 
     cloner = git_clone or _clone_repo

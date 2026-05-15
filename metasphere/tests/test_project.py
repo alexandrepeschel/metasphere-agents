@@ -1,8 +1,12 @@
 from pathlib import Path
 
+import pytest
+
 from metasphere.project import (
+    _validate_name,
     init_project,
     list_projects,
+    new_project,
     project_changelog,
     project_learnings,
 )
@@ -119,5 +123,51 @@ def test_init_preserves_existing_project_claude_md(tmp_paths, tmp_path):
     init_project(path=proj_dir, paths=tmp_paths, goal="v2")
     # The re-seed must not overwrite operator content.
     assert claude_md.read_text() == "OPERATOR-CUSTOMIZED\n"
+
+
+def test_validate_name_rejects_leading_dash():
+    """``--help`` is the canonical failure: a CLI flag that leaked into
+    a positional argument and ended up registered as a project name
+    (real incident, see registry entry path ``~/.metasphere/--help``).
+    Anything starting with ``-`` is almost certainly an argv leak.
+    """
+    with pytest.raises(ValueError, match="CLI flag"):
+        _validate_name("--help")
+    with pytest.raises(ValueError, match="CLI flag"):
+        _validate_name("-h")
+    with pytest.raises(ValueError, match="CLI flag"):
+        _validate_name("--path")
+
+
+def test_validate_name_rejects_empty_and_path_separators():
+    with pytest.raises(ValueError, match="non-empty"):
+        _validate_name("")
+    with pytest.raises(ValueError, match="invalid"):
+        _validate_name("a/b")
+    with pytest.raises(ValueError, match="invalid"):
+        _validate_name("a\\b")
+
+
+def test_validate_name_accepts_normal_names():
+    # No raise.
+    _validate_name("worldwire")
+    _validate_name("ww-eng")
+    _validate_name("rage_2026")
+    _validate_name("a.b")
+
+
+def test_init_project_rejects_flag_like_path(tmp_paths, tmp_path, monkeypatch):
+    """When called with ``path=Path('--help')``, the derived name would
+    have been ``--help`` (a real registry-pollution incident). Validation
+    must catch this before ``_register`` writes ``projects.json``.
+    """
+    monkeypatch.chdir(tmp_path)
+    with pytest.raises(ValueError, match="CLI flag"):
+        init_project(path=Path("--help"), paths=tmp_paths)
+
+
+def test_new_project_rejects_flag_like_name(tmp_paths):
+    with pytest.raises(ValueError, match="CLI flag"):
+        new_project("--help", paths=tmp_paths)
 
 
