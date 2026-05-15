@@ -23,6 +23,15 @@ def test_service_path_resolves_reaper_to_logs_dir(tmp_paths):
     assert p == tmp_paths.logs / "reaper.log"
 
 
+def test_service_path_resolves_posthook_to_suppressions_log(tmp_paths):
+    # posthook.py writes intentional fail-close suppressions to
+    # posthook-suppressions.log. The CLI alias is ``posthook`` (matches
+    # the subsystem, not the filename) so operators don't have to
+    # remember the hyphenated suffix.
+    p = L._service_path("posthook", tmp_paths)
+    assert p == tmp_paths.logs / "posthook-suppressions.log"
+
+
 def test_service_path_events_routes_to_dated_jsonl(tmp_paths):
     p = L._service_path("events", tmp_paths)
     assert "events-" in p.name
