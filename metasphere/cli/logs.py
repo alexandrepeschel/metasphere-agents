@@ -30,6 +30,7 @@ import json
 import os
 import sys
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Optional
 
@@ -85,6 +86,39 @@ def _tail_lines(path: Path, n: int) -> List[str]:
     except OSError:
         return []
     return lines[-n:]
+
+
+def _format_age(seconds: float) -> str:
+    """Render an elapsed-time delta as `Ns`/`Nm`/`Nh`/`Nd ago`.
+
+    Coarse on purpose — the header is a freshness gauge, not a clock.
+    """
+    s = max(0, int(seconds))
+    if s < 60:
+        return f"{s}s ago"
+    if s < 3600:
+        return f"{s // 60}m ago"
+    if s < 86400:
+        return f"{s // 3600}h ago"
+    return f"{s // 86400}d ago"
+
+
+def _header_line(path: Path, *, now: Optional[float] = None) -> str:
+    """Return a one-line `# <name> — last write <iso> (<age>)` header.
+
+    Surfaces file mtime so operators can tell whether the tail is fresh
+    or frozen. Many log lines (e.g., heartbeat's `[tmux.submit] defer:`)
+    have no embedded timestamp, so a 50-line tail can look identical
+    whether the daemon is silent today or stopped writing 4 days ago.
+    """
+    try:
+        mtime = path.stat().st_mtime
+    except OSError:
+        return f"# {path.name} — (stat failed)"
+    ts = datetime.fromtimestamp(mtime, tz=timezone.utc).strftime(
+        "%Y-%m-%dT%H:%M:%SZ")
+    age = _format_age((now if now is not None else time.time()) - mtime)
+    return f"# {path.name} — last write {ts} ({age})"
 
 
 def _render(lines: List[str], *, is_events: bool) -> None:
@@ -158,6 +192,10 @@ def main(argv: Optional[List[str]] = None) -> int:
         print(f"metasphere logs: no log at {path}", file=sys.stderr)
         return 1
 
+    # Freshness header — skipped under -f, where the live tail makes
+    # mtime self-evident and the static header would scroll out anyway.
+    if not args.follow:
+        print(_header_line(path), file=sys.stderr)
     _render(_tail_lines(path, args.lines), is_events=is_events)
     if args.follow:
         try:

@@ -106,3 +106,46 @@ def test_cli_tails_events_and_prettifies(tmp_paths, capsys):
     assert "[x.y]" in out
     assert "agent=@a" in out
     assert "hello" in out
+
+
+def test_format_age_buckets():
+    # _format_age is coarse-by-design: seconds → minutes → hours → days.
+    # The header is a freshness gauge ("is this stale?"), not a clock.
+    assert L._format_age(0) == "0s ago"
+    assert L._format_age(45) == "45s ago"
+    assert L._format_age(60) == "1m ago"
+    assert L._format_age(125) == "2m ago"
+    assert L._format_age(3600) == "1h ago"
+    assert L._format_age(86400) == "1d ago"
+    assert L._format_age(4 * 86400 + 10) == "4d ago"
+
+
+def test_header_line_renders_mtime_and_age(tmp_path):
+    log = tmp_path / "heartbeat.log"
+    log.write_text("line\n")
+    mtime = log.stat().st_mtime
+    line = L._header_line(log, now=mtime + 5)
+    assert line.startswith("# heartbeat.log — last write ")
+    assert "Z (" in line
+    assert "5s ago)" in line
+
+
+def test_header_line_when_stat_fails(tmp_path):
+    line = L._header_line(tmp_path / "missing.log")
+    assert line == "# missing.log — (stat failed)"
+
+
+def test_cli_prints_header_to_stderr(tmp_paths, capsys):
+    # Header is informational, not part of the log content — it goes to
+    # stderr so pipelines (`metasphere logs schedule | grep foo`) stay
+    # clean.
+    tmp_paths.logs.mkdir(exist_ok=True)
+    log = tmp_paths.logs / "schedule.log"
+    log.write_text("line-1\nline-2\n")
+    rc = L.main(["schedule"])
+    assert rc == 0
+    captured = capsys.readouterr()
+    assert "# schedule.log — last write" in captured.err
+    assert "# schedule.log" not in captured.out
+    assert "line-1" in captured.out
+    assert "line-2" in captured.out
