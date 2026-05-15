@@ -27,15 +27,32 @@ import fcntl
 import json
 import os
 import re
+import time
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, Callable, List, Optional
+from typing import Any, Dict, Callable, List, Optional, Tuple
 
 from . import api
 
 ATTACHMENTS_ROOT = Path.home() / ".metasphere" / "attachments"
+
+#: Kinds whose downloaded payload we run through faster-whisper. ``voice``
+#: is the OGG/Opus telegram voice-note; ``audio`` is a user-attached audio
+#: file. Both arrive as a single dict with ``file_id`` + ``duration``.
+_VOICE_KINDS = frozenset({"voice", "audio"})
+
+#: How long downloaded voice files linger on disk after a successful
+#: transcription. Operators occasionally need the raw audio for a recheck
+#: ("what did they actually say?") but anything past a week is dead weight.
+VOICE_RETENTION_DAYS = 7
+
+#: Filename glob for voice-note downloads. Telegram serves voice notes as
+#: ``.oga`` (its renamed OGG/Opus container) — keep the pruner narrow so
+#: it can't ever sweep an unrelated document the operator drops next to
+#: their attachments tree.
+_VOICE_GLOB = "*.oga"
 
 #: Diagnostic log for real-Telegram runs where attachments fail silently.
 #: JSONL, one line per inbound update, so ``tail -f`` gives a live view
@@ -60,6 +77,9 @@ class AttachmentRef:
     file_size: Optional[int] = None
     file_name: Optional[str] = None
     mime_type: Optional[str] = None
+    #: Voice/audio duration in seconds (from the Telegram payload). None
+    #: for non-audio kinds.
+    duration: Optional[int] = None
 
 
 @dataclass
@@ -69,6 +89,18 @@ class DownloadedAttachment:
     file_size: Optional[int]
     mime_type: Optional[str]
     error: Optional[str] = None
+    duration: Optional[int] = None
+    #: Whisper transcript text. Set on a successful voice/audio
+    #: transcription; None otherwise.
+    transcript: Optional[str] = None
+    #: ISO-639-1 language code detected by faster-whisper (e.g. "en").
+    language: Optional[str] = None
+    #: Outcome of the transcription attempt for voice/audio kinds:
+    #:   - None        — not attempted (non-voice attachment or download failure)
+    #:   - "ok"        — transcript + language populated
+    #:   - "unavailable" — faster-whisper not importable
+    #:   - "failed: <reason>" — model loaded but transcription raised
+    transcription_status: Optional[str] = None
 
 
 def parse_attachments(msg: dict) -> List[AttachmentRef]:
@@ -100,12 +132,14 @@ def parse_attachments(msg: dict) -> List[AttachmentRef]:
         if key == _PHOTO_KEY:
             continue
         if isinstance(val, dict) and val.get("file_id"):
+            duration = val.get("duration") if key in _VOICE_KINDS else None
             refs.append(AttachmentRef(
                 kind=key,
                 file_id=val["file_id"],
                 file_size=val.get("file_size"),
                 file_name=val.get("file_name"),
                 mime_type=val.get("mime_type"),
+                duration=duration if isinstance(duration, int) else None,
             ))
 
     return refs
@@ -166,6 +200,7 @@ def download_attachment(
             return DownloadedAttachment(
                 kind=ref.kind, path=None,
                 file_size=ref.file_size, mime_type=ref.mime_type,
+                duration=ref.duration,
                 error="getFile: no file_path in response",
             )
         # ``api._config()`` is the single source of truth for the bot
@@ -182,17 +217,20 @@ def download_attachment(
             kind=ref.kind, path=dest,
             file_size=ref.file_size or len(data),
             mime_type=ref.mime_type,
+            duration=ref.duration,
         )
     except api.TelegramAPIError as e:
         return DownloadedAttachment(
             kind=ref.kind, path=None,
             file_size=ref.file_size, mime_type=ref.mime_type,
+            duration=ref.duration,
             error=f"getFile: {e.description}",
         )
     except (OSError, urllib.error.URLError, ValueError) as e:
         return DownloadedAttachment(
             kind=ref.kind, path=None,
             file_size=ref.file_size, mime_type=ref.mime_type,
+            duration=ref.duration,
             error=f"download: {e}",
         )
 
@@ -214,10 +252,102 @@ def download_attachments(
     if root is None:
         root = ATTACHMENTS_ROOT
     dest_dir = root / str(message_id)
-    return [
+    results = [
         download_attachment(r, dest_dir, http_get=http_get, call_fn=call_fn)
         for r in refs
     ]
+    transcribed_any = False
+    for item in results:
+        if item.kind not in _VOICE_KINDS or item.path is None:
+            continue
+        _attempt_transcription(item)
+        if item.transcription_status == "ok":
+            transcribed_any = True
+    # Retention sweep only runs when at least one transcript landed —
+    # without faster-whisper installed we keep every .oga forever so the
+    # operator still has the audio when they later opt in to the dep.
+    if transcribed_any:
+        prune_old_voice_files(root)
+    return results
+
+
+def _load_whisper_model() -> Optional[Any]:
+    """Instantiate the faster-whisper 'small' model.
+
+    Returns None when the dep is missing; tests monkeypatch this to a
+    stub. Kept module-level (not a closure inside ``_attempt_transcription``)
+    so it can be replaced wholesale without reaching into private state.
+    """
+    try:
+        from faster_whisper import WhisperModel  # type: ignore
+    except ImportError:
+        return None
+    # ``int8`` quantisation on CPU is the documented sweet spot for the
+    # small model on commodity hosts (the gateway box is not GPU-equipped).
+    return WhisperModel("small", device="cpu", compute_type="int8")
+
+
+def _attempt_transcription(item: DownloadedAttachment) -> None:
+    """Populate ``item.transcript / language / transcription_status``.
+
+    Mutates ``item`` in place because the surrounding pipeline keeps
+    DownloadedAttachment as a single per-attachment record. Never raises:
+    a faster-whisper crash on a malformed .oga must not take down the
+    poller — it just degrades that one line of the rendered block.
+    """
+    if item.path is None:
+        return
+    model = _load_whisper_model()
+    if model is None:
+        item.transcription_status = "unavailable"
+        return
+    try:
+        segments, info = model.transcribe(str(item.path))
+        # faster-whisper returns a generator of Segment objects — join
+        # their text into a single string, stripping the leading whitespace
+        # each segment carries.
+        text = " ".join((seg.text or "").strip() for seg in segments).strip()
+        item.transcript = text
+        item.language = getattr(info, "language", None)
+        item.transcription_status = "ok"
+    except Exception as e:  # noqa: BLE001  (must never crash poller)
+        item.transcription_status = f"failed: {e}"
+
+
+def prune_old_voice_files(
+    root: Optional[Path] = None,
+    *,
+    max_age_days: int = VOICE_RETENTION_DAYS,
+    now: Optional[float] = None,
+) -> int:
+    """Delete .oga files under ``root`` whose mtime is older than the cutoff.
+
+    Returns the number of files removed. Best-effort: any per-file error
+    is swallowed so a single permission glitch can't abort the sweep. We
+    only sweep the narrow ``*.oga`` glob — never anything else under the
+    attachments tree.
+    """
+    if root is None:
+        root = ATTACHMENTS_ROOT
+    if not root.exists():
+        return 0
+    if now is None:
+        now = time.time()
+    cutoff = now - (max_age_days * 86400)
+    removed = 0
+    try:
+        for p in root.rglob(_VOICE_GLOB):
+            try:
+                if not p.is_file():
+                    continue
+                if p.stat().st_mtime < cutoff:
+                    p.unlink()
+                    removed += 1
+            except OSError:
+                continue
+    except OSError:
+        return removed
+    return removed
 
 
 def _fmt_size(n: Optional[int]) -> str:
@@ -284,6 +414,12 @@ def summarize_message_for_debug(msg: dict) -> Dict[str, Any]:
     }
 
 
+def _fmt_duration(seconds: Optional[int]) -> str:
+    if seconds is None:
+        return "?"
+    return f"{seconds}"
+
+
 def render_attachment_block(items: List[DownloadedAttachment]) -> str:
     """Render a human+LLM readable block of attachment lines.
 
@@ -293,6 +429,12 @@ def render_attachment_block(items: List[DownloadedAttachment]) -> str:
         - photo: /home/.../12345/image.jpg (1.2 MB, jpeg)
         - document: /home/.../12345/report.pdf (345.0 KB, pdf)
         - audio: (download failed: getFile: FILE_NOT_FOUND)
+
+    Voice (and audio) items where faster-whisper produced a transcript
+    render inline instead of as a path line::
+
+        [voice 3s en]
+        hello there
 
     Returns empty string if ``items`` is empty, so callers can safely
     concatenate without worrying about stray blank blocks.
@@ -304,6 +446,11 @@ def render_attachment_block(items: List[DownloadedAttachment]) -> str:
         if it.error:
             lines.append(f"- {it.kind}: (download failed: {it.error})")
             continue
+        if it.kind in _VOICE_KINDS and it.transcription_status == "ok":
+            lang = it.language or "?"
+            lines.append(f"[{it.kind} {_fmt_duration(it.duration)}s {lang}]")
+            lines.append(it.transcript or "")
+            continue
         size = _fmt_size(it.file_size)
         extras: List[str] = []
         if it.mime_type:
@@ -311,5 +458,14 @@ def render_attachment_block(items: List[DownloadedAttachment]) -> str:
             if ext:
                 extras.append(ext)
         tail = f", {', '.join(extras)}" if extras else ""
-        lines.append(f"- {it.kind}: {it.path} ({size}{tail})")
+        path_line = f"- {it.kind}: {it.path} ({size}{tail})"
+        if it.kind in _VOICE_KINDS:
+            if it.transcription_status == "unavailable":
+                path_line += " (transcription unavailable — install faster-whisper)"
+            elif it.transcription_status and it.transcription_status.startswith("failed"):
+                # Strip the ``failed: `` prefix so the user sees the
+                # underlying reason rather than the internal sentinel.
+                reason = it.transcription_status[len("failed: "):]
+                path_line += f" (transcription failed: {reason})"
+        lines.append(path_line)
     return "\n".join(lines)

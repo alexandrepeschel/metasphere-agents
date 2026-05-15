@@ -396,6 +396,14 @@ install_scripts() {
             --no-warn-script-location 2>&1 | tail -3 || true
     fi
 
+    # Surface the optional voice-transcription extra. We intentionally do
+    # NOT auto-install it — the faster-whisper wheel is heavyweight (CUDA
+    # runtime + model download on first use) and many operators don't
+    # care about voice notes. Just nudge.
+    if ! "$VENV_DIR/bin/pip" show faster-whisper &>/dev/null; then
+        info "Voice transcription optional. Install with: pip install metasphere-agents[voice]"
+    fi
+
     # Ensure the unified binary exists in BIN_DIR. Prefer the venv
     # entry point; fall back to legacy locations for already-set-up
     # hosts before we gain the venv.

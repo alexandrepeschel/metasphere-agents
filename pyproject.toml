@@ -12,6 +12,16 @@ dependencies = [
   "PyYAML>=6,<7",
 ]
 
+[project.optional-dependencies]
+# Voice-note transcription via OpenAI Whisper (CTranslate2 build). Optional
+# because the wheel pulls ~150MB of CUDA/CPU runtime + model files; the
+# harness degrades gracefully when this extra isn't installed and just
+# renders a "(transcription unavailable — install faster-whisper)" note
+# on voice attachments. Opt in with: pip install metasphere-agents[voice]
+voice = [
+  "faster-whisper>=1.0,<2",
+]
+
 [project.scripts]
 # Unified entry point — see metasphere/cli/main.py
 metasphere               = "metasphere.cli.main:main"
