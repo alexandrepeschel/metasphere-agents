@@ -322,6 +322,32 @@ def test_spawn_ephemeral_does_not_pollute_scope_inbox(tmp_paths: Paths, monkeypa
     assert msgs == [], f"spawn should not create scope-inbox messages, got {msgs}"
 
 
+@pytest.mark.parametrize(
+    "bad_name",
+    [
+        "--help",
+        "-h",
+        "@--help",
+        "@-typo",
+        "",
+        "   ",
+        "with/slash",
+        "with\\backslash",
+        "with\x00null",
+    ],
+)
+def test_spawn_ephemeral_rejects_invalid_names(
+    tmp_paths: Paths, monkeypatch, bad_name: str
+):
+    monkeypatch.setenv("METASPHERE_SPAWN_NO_EXEC", "1")
+    with pytest.raises(ValueError):
+        agents.spawn_ephemeral(
+            bad_name, "/", "task", parent="@orchestrator", paths=tmp_paths,
+        )
+    # No ghost dir under the bad name.
+    assert not (tmp_paths.agents / bad_name).exists()
+
+
 # ---------------------------------------------------------------------------
 # wake_persistent
 # ---------------------------------------------------------------------------

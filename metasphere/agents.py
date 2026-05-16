@@ -19,6 +19,7 @@ from __future__ import annotations
 import datetime as _dt
 import json
 import os
+import re as _re
 import shlex
 import shutil
 import subprocess
@@ -56,6 +57,36 @@ def _utcnow() -> str:
 
 def _normalize_name(name: str) -> str:
     return name if name.startswith("@") else "@" + name
+
+
+_AGENT_NAME_INVALID_RE = _re.compile(r"[/\\\x00]")
+
+
+def _validate_agent_name(name: str) -> None:
+    """Reject empty/flag-shaped/path-bearing agent names before they hit
+    disk.
+
+    Without this a typo like ``metasphere agent spawn --help`` would
+    create an agent dir literally named ``@--help`` — the same class of
+    argv-leak that produced the ghost ``--help`` project entry fixed in
+    df6812e. Validated at the library layer so every spawn site
+    (CLI, future callers) gets the guard.
+    """
+    if not isinstance(name, str) or not name.strip():
+        raise ValueError("agent name must be a non-empty string")
+    bare = name[1:] if name.startswith("@") else name
+    if not bare:
+        raise ValueError("agent name must be non-empty after optional '@'")
+    if bare.startswith("-"):
+        raise ValueError(
+            f"agent name looks like a CLI flag: {name!r} "
+            f"(must not start with '-' after optional '@')"
+        )
+    if _AGENT_NAME_INVALID_RE.search(bare):
+        raise ValueError(
+            f"invalid agent name: {name!r} "
+            f"(must not contain /, \\, or null)"
+        )
 
 
 def _tmux_bin() -> str:
@@ -364,6 +395,7 @@ def spawn_ephemeral(
 
     Honors ``METASPHERE_SPAWN_NO_EXEC=1`` to skip execution.
     """
+    _validate_agent_name(agent_name)
     paths = paths or resolve()
     agent_id = _normalize_name(agent_name)
     timestamp = _utcnow()

@@ -112,3 +112,39 @@ def test_list_no_persistent_agents_prints_message(
     out, _ = capsys.readouterr()
     assert rc == 0
     assert "No persistent agents." in out
+
+
+# ---------------------------------------------------------------------------
+# spawn_main flag-shape rejection (mirrors df6812e project-init fix)
+# ---------------------------------------------------------------------------
+
+def test_spawn_main_help_prints_usage(capsys):
+    rc = cli_agents.spawn_main(["--help"])
+    out, _ = capsys.readouterr()
+    assert rc == 0
+    assert "metasphere agent spawn" in out
+
+
+def test_spawn_main_short_help_prints_usage(capsys):
+    rc = cli_agents.spawn_main(["-h"])
+    out, _ = capsys.readouterr()
+    assert rc == 0
+    assert "metasphere agent spawn" in out
+
+
+def test_spawn_main_rejects_flag_shaped_agent_name(
+    tmp_paths: Paths, capsys, monkeypatch,
+):
+    """``metasphere agent spawn --typo /scope/ "task"`` previously
+    persisted ``@--typo`` to disk — the same argv-leak class as the
+    ghost ``--help`` project fixed in df6812e. The library-layer
+    validator now refuses it; the CLI renders the ValueError as a
+    clean stderr line + exit 2.
+    """
+    monkeypatch.setenv("METASPHERE_SPAWN_NO_EXEC", "1")
+    rc = cli_agents.spawn_main(["--bogus", "/", "do thing", "@orchestrator"])
+    _, err = capsys.readouterr()
+    assert rc == 2
+    assert "looks like a CLI flag" in err
+    assert not (tmp_paths.agents / "@--bogus").exists()
+    assert not (tmp_paths.agents / "--bogus").exists()

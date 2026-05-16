@@ -131,6 +131,9 @@ def _extract_flag(argv: list[str], flag: str) -> tuple[str, list[str]]:
 
 def spawn_main(argv: list[str] | None = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
+    if argv and argv[0] in ("--help", "-h"):
+        sys.stdout.write(_SPAWN_USAGE)
+        return 0
     # Peel off contract flags first so they can appear anywhere.
     authority, argv = _extract_flag(argv, "--authority")
     responsibility, argv = _extract_flag(argv, "--responsibility")
@@ -141,6 +144,16 @@ def spawn_main(argv: list[str] | None = None) -> int:
         return 1
     agent_id, scope_path, task = argv[0], argv[1], argv[2]
     parent = argv[3] if len(argv) >= 4 else "@orchestrator"
+
+    # Pre-check the agent name before the contract-warning nudge so a
+    # flag-shaped typo (`metasphere agent spawn --bogus ...`) doesn't
+    # surface a confusing "Legacy spawn accepted" line before the real
+    # rejection. spawn_ephemeral re-validates as defense in depth.
+    try:
+        _agents._validate_agent_name(agent_id)
+    except ValueError as e:
+        print(f"metasphere agent spawn: {e}", file=sys.stderr)
+        return 2
 
     # Nudge: warn loudly when spawning without a contract so the
     # operator (or orchestrator) feels the friction. Don't hard-block
@@ -153,15 +166,19 @@ def spawn_main(argv: list[str] | None = None) -> int:
             file=sys.stderr,
         )
 
-    rec = _agents.spawn_ephemeral(
-        agent_id,
-        scope_path,
-        task,
-        parent,
-        authority=authority,
-        responsibility=responsibility,
-        accountability=accountability,
-    )
+    try:
+        rec = _agents.spawn_ephemeral(
+            agent_id,
+            scope_path,
+            task,
+            parent,
+            authority=authority,
+            responsibility=responsibility,
+            accountability=accountability,
+        )
+    except ValueError as e:
+        print(f"metasphere agent spawn: {e}", file=sys.stderr)
+        return 2
     print(f"Spawned {rec.name}")
     print(f"  Scope:  {rec.scope}")
     print(f"  Parent: {rec.parent}")
