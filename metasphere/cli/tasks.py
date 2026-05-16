@@ -287,11 +287,30 @@ def _cmd_new(args: list[str]) -> int:
         if a in _tasks.VALID_PRIORITIES:
             priority = a
             i += 1
-        elif a == "--project" and i + 1 < len(args):
-            explicit_project = args[i + 1]
-            i += 2
-        elif a == "--assign" and i + 1 < len(args):
-            explicit_assign = args[i + 1]
+        elif a in ("--project", "--assign"):
+            # Consume-next-arg flags. A bare flag at the end or one
+            # immediately followed by another flag-shaped token is a
+            # typo we used to swallow into the title; reject so the
+            # value doesn't land in task frontmatter as e.g.
+            # ``project: --bogus`` or ``assigned: @--bogus``.
+            if i + 1 >= len(args):
+                print(
+                    f"Error: {a} requires a value",
+                    file=sys.stderr,
+                )
+                return 2
+            value = args[i + 1]
+            if value.startswith("-"):
+                print(
+                    f"Error: {a} value {value!r} looks like a flag; "
+                    "expected a name",
+                    file=sys.stderr,
+                )
+                return 2
+            if a == "--project":
+                explicit_project = value
+            else:
+                explicit_assign = value
             i += 2
         else:
             title_parts.append(a)

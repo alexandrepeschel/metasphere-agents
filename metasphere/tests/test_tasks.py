@@ -315,6 +315,48 @@ def test_cli_new_warns_and_defaults(tmp_paths, monkeypatch, capsys):
     assert "METASPHERE_AGENT_ID" in err
 
 
+@pytest.mark.parametrize(
+    "args,bad_flag",
+    [
+        (["title", "--project", "--bogus"], "--project"),
+        (["title", "--assign", "--bogus"], "--assign"),
+        (["title", "--project", "-x"], "--project"),
+        (["title", "--assign", "-@a"], "--assign"),
+    ],
+)
+def test_cli_new_rejects_flag_shaped_values(
+    tmp_paths, monkeypatch, capsys, args, bad_flag
+):
+    """``tasks new`` used to swallow ``--project --bogus`` and write a real
+    task with ``project: --bogus`` in frontmatter. Reject the typo instead."""
+    from metasphere.cli import tasks as cli_tasks
+    monkeypatch.setenv("METASPHERE_AGENT_ID", "@explorer")
+    rc = cli_tasks._cmd_new(args)
+    assert rc == 2
+    err = capsys.readouterr().err
+    assert bad_flag in err
+    assert "looks like a flag" in err
+    active = tmp_paths.scope / ".tasks" / "active"
+    assert not active.exists() or not list(active.glob("*.md"))
+
+
+@pytest.mark.parametrize("flag", ["--project", "--assign"])
+def test_cli_new_rejects_bare_consume_next_flag(
+    tmp_paths, monkeypatch, capsys, flag
+):
+    """Trailing ``--project`` with no value used to be silently appended
+    to the task title; now it errors."""
+    from metasphere.cli import tasks as cli_tasks
+    monkeypatch.setenv("METASPHERE_AGENT_ID", "@explorer")
+    rc = cli_tasks._cmd_new(["title", flag])
+    assert rc == 2
+    err = capsys.readouterr().err
+    assert flag in err
+    assert "requires a value" in err
+    active = tmp_paths.scope / ".tasks" / "active"
+    assert not active.exists() or not list(active.glob("*.md"))
+
+
 def test_cli_list_filters(tmp_paths, monkeypatch, capsys):
     from metasphere.cli import tasks as cli_tasks
     monkeypatch.setenv("METASPHERE_AGENT_ID", "@alice")
