@@ -158,6 +158,49 @@ def test_setup_forum_refuses_invalid_without_force(tmp_paths):
     assert g.get_forum_id(tmp_paths) is None
 
 
+def test_create_topic_rejects_empty(tmp_paths):
+    _setup_forum(tmp_paths)
+    with pytest.raises(ValueError):
+        g.create_topic("", paths=tmp_paths)
+
+
+def test_create_topic_rejects_flag_shaped_name(tmp_paths):
+    """A CLI typo like `groups create --help` must not call Telegram or persist."""
+    _setup_forum(tmp_paths)
+    with patch("metasphere.telegram.groups.tg_api.call") as m:
+        with pytest.raises(ValueError):
+            g.create_topic("--help", paths=tmp_paths)
+    m.assert_not_called()
+    assert g.list_topics(paths=tmp_paths) == []
+
+
+def test_cli_create_help_does_not_create_topic(tmp_paths, monkeypatch):
+    """`groups create --help` prints usage and does NOT hit the API."""
+    from metasphere.cli import telegram_groups as cli
+    monkeypatch.setattr("metasphere.cli.telegram_groups.resolve",
+                        lambda: tmp_paths)
+    _setup_forum(tmp_paths)
+    with patch("metasphere.telegram.groups.tg_api.call") as m:
+        rc = cli.main(["create", "--help"])
+    assert rc == 0
+    m.assert_not_called()
+    assert g.list_topics(paths=tmp_paths) == []
+
+
+def test_cli_create_flag_shaped_name_exits_clean(tmp_paths, monkeypatch, capsys):
+    """A non-help flag-shaped name surfaces as a clean error, not an API call."""
+    from metasphere.cli import telegram_groups as cli
+    monkeypatch.setattr("metasphere.cli.telegram_groups.resolve",
+                        lambda: tmp_paths)
+    _setup_forum(tmp_paths)
+    with patch("metasphere.telegram.groups.tg_api.call") as m:
+        rc = cli.main(["create", "--force"])
+    assert rc == 2
+    m.assert_not_called()
+    err = capsys.readouterr().err
+    assert "looks like a CLI flag" in err
+
+
 def test_cli_setup_non_interactive(tmp_paths, monkeypatch):
     from metasphere.cli import telegram_groups as cli
     monkeypatch.setattr("metasphere.cli.telegram_groups.resolve",

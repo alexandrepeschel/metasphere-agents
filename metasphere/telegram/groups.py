@@ -177,8 +177,22 @@ def _save_topics(paths: Paths, data: dict) -> None:
     write_json(_topics_file(paths), data)
 
 
+def _validate_topic_name(name: str) -> None:
+    """Reject empty or flag-shaped names before the API call.
+
+    Without this a typo like `metasphere telegram groups create --help`
+    would forward `--help` to Telegram's `createForumTopic` and persist
+    a topic literally named `--help` in the forum.
+    """
+    if not isinstance(name, str) or not name.strip():
+        raise ValueError("topic name must be a non-empty string")
+    if name.startswith("-"):
+        raise ValueError(f"topic name looks like a CLI flag: {name!r}")
+
+
 def create_topic(name: str, *, icon_emoji: str = "📋",
                  paths: Optional[Paths] = None) -> Topic:
+    _validate_topic_name(name)
     paths = paths or resolve()
     forum_id = get_forum_id(paths)
     if not forum_id:

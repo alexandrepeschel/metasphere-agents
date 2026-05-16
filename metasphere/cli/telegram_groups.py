@@ -61,6 +61,9 @@ def main(argv: list[str] | None = None) -> int:
             return _cmd_verify(rest, paths)
 
         if cmd in ("create", "new"):
+            if rest and rest[0] in ("--help", "-h"):
+                print("usage: create <name>", file=sys.stdout)
+                return 0
             if not rest:
                 print("usage: create <name>", file=sys.stderr)
                 return 2
@@ -74,6 +77,9 @@ def main(argv: list[str] | None = None) -> int:
             return 0
 
         if cmd in ("send", "msg"):
+            if rest and rest[0] in ("--help", "-h"):
+                print("usage: send <topic> <text>", file=sys.stdout)
+                return 0
             if len(rest) < 2:
                 print("usage: send <topic> <text>", file=sys.stderr)
                 return 2
@@ -82,11 +88,17 @@ def main(argv: list[str] | None = None) -> int:
             return 0
 
         if cmd in ("link", "url"):
+            if rest and rest[0] in ("--help", "-h"):
+                print("usage: link <topic>", file=sys.stdout)
+                return 0
             if not rest:
                 print("usage: link <topic>", file=sys.stderr)
                 return 2
             print(topic_link(rest[0], paths=paths))
             return 0
+    except ValueError as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 2
     except (RuntimeError, LookupError) as e:
         print(f"error: {e}", file=sys.stderr)
         return 1
