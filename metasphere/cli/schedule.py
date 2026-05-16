@@ -96,8 +96,22 @@ def _cmd_daemon(argv: list[str]) -> int:
 
 
 def _cmd_set_enabled(job_id: str, enabled: bool) -> int:
+    verb = "enable" if enabled else "disable"
     if not job_id:
-        print("usage: schedule {enable|disable} <job-id>", file=sys.stderr)
+        print(f"usage: schedule {verb} <job-id>", file=sys.stderr)
+        return 2
+    # Reject flag-shaped job refs so e.g. ``schedule enable --help``
+    # surfaces a help/usage message instead of falling through to
+    # ``job not found: --help``. Same class as df6812e (project init)
+    # and 206c14b (groups create).
+    if job_id in ("--help", "-h"):
+        sys.stdout.write(USAGE)
+        return 0
+    if job_id.startswith("-"):
+        print(
+            f"schedule {verb}: {job_id!r} looks like a CLI flag, not a job id",
+            file=sys.stderr,
+        )
         return 2
     paths = _paths.resolve()
     if not _sched.set_enabled(job_id, enabled, paths):
