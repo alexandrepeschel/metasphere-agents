@@ -225,3 +225,30 @@ def test_seed_agent_preserves_existing_agent_user_md(tmp_paths):
     )
     assert user_md.read_text() == "CUSTOMIZED LOCALLY\n"
     assert not user_md.is_symlink()
+
+
+# ---------- seed_agent name validation (flag-leak guard) ----------
+
+@pytest.mark.parametrize(
+    "bad_name",
+    [
+        "--bogus",
+        "-h",
+        "@--help",
+        "@-typo",
+        "",
+        "   ",
+        "with/slash",
+        "with\\backslash",
+    ],
+)
+def test_seed_agent_rejects_invalid_names(tmp_paths, bad_name):
+    spec = _seed_test_spec(
+        tmp_paths.project_root / "specs" / "researcher",
+        name="researcher", role="researcher",
+    )
+    with pytest.raises(ValueError):
+        _specs.seed_agent(bad_name, spec, paths=tmp_paths)
+    # No ghost agent dir for the bad name (either raw or @-prefixed).
+    assert not (tmp_paths.agents / bad_name).exists()
+    assert not (tmp_paths.agents / f"@{bad_name}").exists()

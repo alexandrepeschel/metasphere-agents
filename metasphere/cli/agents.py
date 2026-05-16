@@ -517,14 +517,18 @@ def _seed(argv: list[str]) -> int:
         except Exception:
             pass
 
-    agent_dir = _specs.seed_agent(
-        agent_id,
-        spec,
-        project_name=project_name,
-        project_goal=project_goal,
-        scope=project_scope or "",
-        force=force,
-    )
+    try:
+        agent_dir = _specs.seed_agent(
+            agent_id,
+            spec,
+            project_name=project_name,
+            project_goal=project_goal,
+            scope=project_scope or "",
+            force=force,
+        )
+    except ValueError as e:
+        print(f"metasphere agent seed: {e}", file=sys.stderr)
+        return 2
     print(f"Seeded {agent_id} from spec '{spec_name}'")
     print(f"  Directory: {agent_dir}")
     print(f"  Files: SOUL.md, MISSION.md, persona-index.md, LEARNINGS.md")

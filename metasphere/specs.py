@@ -24,6 +24,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
+from .agents import _validate_agent_name
 from .io import atomic_write_text
 from .paths import Paths, resolve
 
@@ -279,6 +280,7 @@ def seed_agent(
     Idempotent unless ``force=True`` — won't overwrite existing files.
     Returns the agent directory path.
     """
+    _validate_agent_name(agent_id)
     paths = paths or resolve()
     if not agent_id.startswith("@"):
         agent_id = "@" + agent_id

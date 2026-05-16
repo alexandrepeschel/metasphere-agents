@@ -148,3 +148,28 @@ def test_spawn_main_rejects_flag_shaped_agent_name(
     assert "looks like a CLI flag" in err
     assert not (tmp_paths.agents / "@--bogus").exists()
     assert not (tmp_paths.agents / "--bogus").exists()
+
+
+def test_agent_seed_rejects_flag_shaped_name(
+    tmp_paths: Paths, capsys,
+):
+    """``metasphere agent seed --spec foo @--bogus`` previously
+    seeded a persona stack under ``@--bogus/`` — same argv-leak class
+    as spawn. seed_agent now validates names; the CLI renders the
+    ValueError as a clean stderr line + exit 2.
+    """
+    # Create a minimal spec so the lookup succeeds before seeding.
+    spec_dir = tmp_paths.project_root / "specs" / "researcher"
+    spec_dir.mkdir(parents=True, exist_ok=True)
+    (spec_dir / "config.md").write_text(
+        "---\nname: researcher\nrole: researcher\ndescription: t\n"
+        "sandbox: scoped\npersistent: true\n---\n"
+    )
+    (spec_dir / "SOUL.md").write_text("# {{agent_id}}\n")
+    (spec_dir / "MISSION.md").write_text("# {{agent_id}}\n")
+
+    rc = cli_agents.main(["seed", "--spec", "researcher", "@--bogus"])
+    _, err = capsys.readouterr()
+    assert rc == 2
+    assert "looks like a CLI flag" in err
+    assert not (tmp_paths.agents / "@--bogus").exists()
