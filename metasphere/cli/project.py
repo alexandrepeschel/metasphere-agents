@@ -184,8 +184,12 @@ def _cmd_member(rest: list[str], paths) -> int:
         ap.add_argument("--role", default="contributor")
         ap.add_argument("--persistent", action="store_true")
         ns = ap.parse_args(args)
-        proj = add_member(ns.name, ns.agent, role=ns.role,
-                          persistent=ns.persistent, paths=paths)
+        try:
+            proj = add_member(ns.name, ns.agent, role=ns.role,
+                              persistent=ns.persistent, paths=paths)
+        except ValueError as e:
+            print(str(e), file=sys.stderr)
+            return 2
         print(f"Added {ns.agent} to {proj.name}")
         return 0
     if verb == "remove":
@@ -193,7 +197,11 @@ def _cmd_member(rest: list[str], paths) -> int:
         ap.add_argument("name")
         ap.add_argument("agent")
         ns = ap.parse_args(args)
-        proj = remove_member(ns.name, ns.agent, paths=paths)
+        try:
+            proj = remove_member(ns.name, ns.agent, paths=paths)
+        except ValueError as e:
+            print(str(e), file=sys.stderr)
+            return 2
         print(f"Removed {ns.agent} from {proj.name}")
         return 0
     if verb in ("list", "ls"):

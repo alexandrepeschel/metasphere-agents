@@ -782,6 +782,8 @@ def _require(name_or_path: str | Path, paths: Paths) -> Project:
 def add_member(name_or_path: str | Path, agent_id: str, *,
                role: str = "contributor", persistent: bool = False,
                paths: Optional[Paths] = None) -> Project:
+    from .agents import _validate_agent_name
+    _validate_agent_name(agent_id)
     paths = paths or resolve()
     proj = _require(name_or_path, paths)
     if not agent_id.startswith("@"):
@@ -797,6 +799,8 @@ def add_member(name_or_path: str | Path, agent_id: str, *,
 
 def remove_member(name_or_path: str | Path, agent_id: str, *,
                   paths: Optional[Paths] = None) -> Project:
+    from .agents import _validate_agent_name
+    _validate_agent_name(agent_id)
     paths = paths or resolve()
     proj = _require(name_or_path, paths)
     if not agent_id.startswith("@"):

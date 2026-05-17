@@ -175,3 +175,57 @@ def test_cli_list(tmp_paths, tmp_path, capsys):
     assert project_cli(["list"]) == 0
     out = capsys.readouterr().out
     assert "eta" in out
+
+
+# ---------- flag-leak guards on member add/remove ----------
+
+
+@pytest.mark.parametrize("bad", ["--help", "-h", "@--bogus", "@-x", "", "@"])
+def test_add_member_rejects_flag_shaped_agent(tmp_paths, tmp_path, bad):
+    """``project member add <name> --bogus`` previously wrote
+    ``@--bogus`` (or empty) into the project's members list. Same class
+    of argv-leak fixed for ``tasks assign`` (a52c91a) and
+    ``agent spawn`` (70dd6b3).
+    """
+    new_project("theta", path=tmp_path / "theta", paths=tmp_paths)
+    with pytest.raises(ValueError):
+        add_member("theta", bad, paths=tmp_paths)
+    # No ghost member written.
+    assert list_members("theta", paths=tmp_paths) == []
+
+
+@pytest.mark.parametrize("bad", ["--help", "-h", "@--bogus", "", "@"])
+def test_remove_member_rejects_flag_shaped_agent(tmp_paths, tmp_path, bad):
+    new_project("iota", path=tmp_path / "iota", paths=tmp_paths)
+    add_member("iota", "@keep", paths=tmp_paths)
+    with pytest.raises(ValueError):
+        remove_member("iota", bad, paths=tmp_paths)
+    # Legitimate member untouched.
+    assert [m.id for m in list_members("iota", paths=tmp_paths)] == ["@keep"]
+
+
+def test_cli_member_add_rejects_flag_clean_stderr(tmp_paths, tmp_path, capsys):
+    """Shapes that survive argparse's flag-detection and land at the
+    library validator: ``@--bogus`` (looks like ``@`` + agent name to
+    argparse, but bare form starts with ``-``).
+    """
+    project_cli(["new", "kappa", "--path", str(tmp_path / "kappa")])
+    capsys.readouterr()
+    rc = project_cli(["member", "add", "kappa", "@--bogus"])
+    assert rc == 2
+    err = capsys.readouterr().err
+    assert "CLI flag" in err
+    # No ghost member landed.
+    assert list_members("kappa", paths=tmp_paths) == []
+
+
+def test_cli_member_remove_rejects_flag_clean_stderr(tmp_paths, tmp_path, capsys):
+    project_cli(["new", "lambda", "--path", str(tmp_path / "lambda")])
+    add_member("lambda", "@keep", paths=tmp_paths)
+    capsys.readouterr()
+    rc = project_cli(["member", "remove", "lambda", "@--bogus"])
+    assert rc == 2
+    err = capsys.readouterr().err
+    assert "CLI flag" in err
+    # Legitimate member untouched.
+    assert [m.id for m in list_members("lambda", paths=tmp_paths)] == ["@keep"]
