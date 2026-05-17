@@ -285,8 +285,43 @@ def create_task(
     return task
 
 
+def _validate_assignee(agent: str) -> None:
+    """Reject empty or flag-shaped assignee names before they reach frontmatter.
+
+    Same class of argv-leak fixed by ``tasks new --assign`` in e4a57a2:
+    `tasks assign <id> @--bogus` would otherwise persist
+    ``assigned_to: @--bogus`` in the task file.
+    """
+    if not isinstance(agent, str) or not agent.strip():
+        raise ValueError("assignee must be a non-empty string")
+    bare = agent[1:] if agent.startswith("@") else agent
+    if not bare:
+        raise ValueError("assignee must be non-empty after optional '@'")
+    if bare.startswith("-"):
+        raise ValueError(
+            f"assignee looks like a CLI flag: {agent!r} "
+            f"(must not start with '-' after optional '@')"
+        )
+
+
+def _validate_project_name(project: str) -> None:
+    """Reject empty or flag-shaped project names before they reach frontmatter.
+
+    `tasks move <id> --project --bogus` would otherwise persist
+    ``project: --bogus`` in the task file.
+    """
+    if not isinstance(project, str) or not project.strip():
+        raise ValueError("project must be a non-empty string")
+    if project.startswith("-"):
+        raise ValueError(
+            f"project name looks like a CLI flag: {project!r} "
+            f"(must not start with '-')"
+        )
+
+
 def assign_task(task_id: str, agent: str, project_root: Path) -> Task:
     """Retroactively set ``assigned_to`` on a task without changing status."""
+    _validate_assignee(agent)
     if not agent.startswith("@"):
         agent = "@" + agent
     return update_task(task_id, project_root, assigned_to=agent,
@@ -295,6 +330,7 @@ def assign_task(task_id: str, agent: str, project_root: Path) -> Task:
 
 def move_task_project(task_id: str, project: str, project_root: Path) -> Task:
     """Retroactively set the ``project`` field on a task."""
+    _validate_project_name(project)
     return update_task(task_id, project_root, project=project,
                        note=f"Moved to project {project}")
 

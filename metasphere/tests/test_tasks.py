@@ -357,6 +357,63 @@ def test_cli_new_rejects_bare_consume_next_flag(
     assert not active.exists() or not list(active.glob("*.md"))
 
 
+@pytest.mark.parametrize(
+    "bad_agent",
+    ["--bogus", "@--bogus", "-x", "@-x", "", "   "],
+)
+def test_assign_task_rejects_flag_shaped_agent(tmp_paths, monkeypatch, bad_agent):
+    """Library-level guard: ``assign_task("foo", "--bogus")`` would
+    otherwise persist ``assigned_to: @--bogus`` in frontmatter."""
+    monkeypatch.setenv("METASPHERE_AGENT_ID", "@owner")
+    task = t.create_task("a", "!normal", tmp_paths.scope, tmp_paths.project_root)
+    with pytest.raises(ValueError):
+        t.assign_task(task.id, bad_agent, tmp_paths.project_root)
+    # Confirm the task's assignee wasn't mutated.
+    loaded = t._load(t._find_task_file(task.id))
+    assert loaded.assignee != "@--bogus"
+    assert loaded.assignee != "@-x"
+
+
+@pytest.mark.parametrize("bad_project", ["--bogus", "-x", "", "   "])
+def test_move_task_rejects_flag_shaped_project(tmp_paths, monkeypatch, bad_project):
+    """Library-level guard: ``move_task_project("foo", "--bogus")`` would
+    otherwise persist ``project: --bogus`` in frontmatter."""
+    monkeypatch.setenv("METASPHERE_AGENT_ID", "@owner")
+    task = t.create_task("a", "!normal", tmp_paths.scope, tmp_paths.project_root)
+    original_project = task.project
+    with pytest.raises(ValueError):
+        t.move_task_project(task.id, bad_project, tmp_paths.project_root)
+    loaded = t._load(t._find_task_file(task.id))
+    assert loaded.project == original_project
+
+
+def test_cli_assign_rejects_flag_shaped_agent(tmp_paths, monkeypatch, capsys):
+    from metasphere.cli import tasks as cli_tasks
+    monkeypatch.setenv("METASPHERE_AGENT_ID", "@owner")
+    task = t.create_task("a", "!normal", tmp_paths.scope, tmp_paths.project_root)
+    capsys.readouterr()
+    rc = cli_tasks._cmd_assign([task.id, "@--bogus"])
+    assert rc == 2
+    err = capsys.readouterr().err
+    assert "looks like a CLI flag" in err
+    loaded = t._load(t._find_task_file(task.id))
+    assert loaded.assignee != "@--bogus"
+
+
+def test_cli_move_rejects_flag_shaped_project(tmp_paths, monkeypatch, capsys):
+    from metasphere.cli import tasks as cli_tasks
+    monkeypatch.setenv("METASPHERE_AGENT_ID", "@owner")
+    task = t.create_task("a", "!normal", tmp_paths.scope, tmp_paths.project_root)
+    original_project = task.project
+    capsys.readouterr()
+    rc = cli_tasks._cmd_move([task.id, "--project", "--bogus"])
+    assert rc == 2
+    err = capsys.readouterr().err
+    assert "looks like a CLI flag" in err
+    loaded = t._load(t._find_task_file(task.id))
+    assert loaded.project == original_project
+
+
 def test_cli_list_filters(tmp_paths, monkeypatch, capsys):
     from metasphere.cli import tasks as cli_tasks
     monkeypatch.setenv("METASPHERE_AGENT_ID", "@alice")

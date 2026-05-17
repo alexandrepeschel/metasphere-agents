@@ -370,7 +370,11 @@ def _cmd_assign(args: list[str]) -> int:
         return 1
     task_id, agent = args[0], args[1]
     _, repo = _ctx()
-    t = _tasks.assign_task(task_id, agent, repo)
+    try:
+        t = _tasks.assign_task(task_id, agent, repo)
+    except ValueError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return 2
     print(f"Assigned: {t.id} → {t.assignee}")
     return 0
 
@@ -388,7 +392,11 @@ def _cmd_move(args: list[str]) -> int:
         print("Usage: tasks move <task-id> --project <name>", file=sys.stderr)
         return 1
     _, repo = _ctx()
-    t = _tasks.move_task_project(task_id, project, repo)
+    try:
+        t = _tasks.move_task_project(task_id, project, repo)
+    except ValueError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return 2
     print(f"Moved: {t.id} → project={t.project}")
     return 0
 
