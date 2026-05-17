@@ -414,6 +414,67 @@ def test_cli_move_rejects_flag_shaped_project(tmp_paths, monkeypatch, capsys):
     assert loaded.project == original_project
 
 
+@pytest.mark.parametrize(
+    "op,argv",
+    [
+        ("start",    ["--bogus"]),
+        ("start",    ["-x"]),
+        ("update",   ["--bogus", "note"]),
+        ("update",   ["-x", "note"]),
+        ("done",     ["--bogus"]),
+        ("done",     ["-x", "summary"]),
+        ("describe", ["--bogus", "text"]),
+        ("describe", ["-x", "text"]),
+        ("show",     ["--bogus"]),
+        ("show",     ["-x"]),
+    ],
+)
+def test_cli_task_id_ops_reject_flag_shape(tmp_paths, monkeypatch, capsys, op, argv):
+    """``tasks {start,update,done,describe,show} --bogus`` previously
+    dropped an uncaught FileNotFoundError traceback. Now rejected up
+    front with rc=1 + a stderr line naming the bad value."""
+    from metasphere.cli import tasks as cli_tasks
+    monkeypatch.setenv("METASPHERE_AGENT_ID", "@owner")
+    # Pre-create a real task so we can confirm no state mutated.
+    real = t.create_task("a", "!normal", tmp_paths.scope, tmp_paths.project_root)
+    pre = (t._find_task_file(real.id)).read_text()
+    capsys.readouterr()
+    cmd = getattr(cli_tasks, f"_cmd_{op}")
+    rc = cmd(argv)
+    assert rc == 1
+    err = capsys.readouterr().err
+    assert argv[0] in err
+    assert "looks like a flag" in err
+    assert f"`tasks {op}`" in err
+    # State unchanged.
+    assert (t._find_task_file(real.id)).read_text() == pre
+
+
+@pytest.mark.parametrize(
+    "op,argv",
+    [
+        ("start",    ["nonexistent-task-id"]),
+        ("update",   ["nonexistent-task-id", "note"]),
+        ("done",     ["nonexistent-task-id"]),
+        ("describe", ["nonexistent-task-id", "text"]),
+    ],
+)
+def test_cli_task_id_ops_missing_id_clean_error(
+    tmp_paths, monkeypatch, capsys, op, argv,
+):
+    """Real (non-flag) but missing task-ids must land as rc=1 + the
+    ``task <id> not found`` text, not a Python traceback."""
+    from metasphere.cli import tasks as cli_tasks
+    monkeypatch.setenv("METASPHERE_AGENT_ID", "@owner")
+    capsys.readouterr()
+    cmd = getattr(cli_tasks, f"_cmd_{op}")
+    rc = cmd(argv)
+    assert rc == 1
+    err = capsys.readouterr().err
+    assert "nonexistent-task-id" in err
+    assert "not found" in err
+
+
 def test_cli_list_filters(tmp_paths, monkeypatch, capsys):
     from metasphere.cli import tasks as cli_tasks
     monkeypatch.setenv("METASPHERE_AGENT_ID", "@alice")

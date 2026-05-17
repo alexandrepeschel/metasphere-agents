@@ -85,6 +85,36 @@ def _agent() -> str:
     return resolve_agent_id(_paths.resolve())
 
 
+_TASK_ID_USAGE = {
+    "start": "Use: tasks start <task-id>",
+    "update": 'Use: tasks update <task-id> "note"',
+    "done": 'Use: tasks done <task-id> ["summary"]',
+    "describe": 'Use: tasks describe <task-id> "description text"',
+    "show": "Use: tasks show <task-id>",
+}
+
+
+def _reject_flag_shape_task_id(value: str, op: str) -> int | None:
+    """Return rc=1 + print error if ``value`` looks like a leaked CLI flag.
+
+    Mirrors the guard in ``cli/messages.py``: task ids never start with
+    ``-``. ``tasks start --bogus`` previously dropped an uncaught
+    FileNotFoundError traceback all the way to the user; gate it here
+    with a clean rc + usage hint instead.
+    """
+    if value.startswith("-"):
+        hint = _TASK_ID_USAGE.get(op, "")
+        msg = (
+            f"Error: task-id {value!r} looks like a flag — `tasks {op}` "
+            "takes positional args only."
+        )
+        if hint:
+            msg = f"{msg} {hint}"
+        print(msg, file=sys.stderr)
+        return 1
+    return None
+
+
 def _scope_is_in_registered_project(scope: Path) -> bool:
     """Return True iff ``scope`` sits inside a directory with .metasphere/.
 
@@ -405,8 +435,15 @@ def _cmd_start(args: list[str]) -> int:
     if not args:
         print("Usage: tasks start <task-id>", file=sys.stderr)
         return 1
+    rc = _reject_flag_shape_task_id(args[0], "start")
+    if rc is not None:
+        return rc
     _, repo = _ctx()
-    t = _tasks.start_task(args[0], _agent(), repo)
+    try:
+        t = _tasks.start_task(args[0], _agent(), repo)
+    except FileNotFoundError as e:
+        print(str(e), file=sys.stderr)
+        return 1
     print(f"Started: {t.id}")
     print(f"Assigned to: {t.assignee}")
     return 0
@@ -417,9 +454,16 @@ def _cmd_update(args: list[str]) -> int:
         print('Usage: tasks update <task-id> "note"', file=sys.stderr)
         return 1
     task_id, *rest = args
+    rc = _reject_flag_shape_task_id(task_id, "update")
+    if rc is not None:
+        return rc
     note = " ".join(rest)
     _, repo = _ctx()
-    _tasks.add_update(task_id, note, repo)
+    try:
+        _tasks.add_update(task_id, note, repo)
+    except FileNotFoundError as e:
+        print(str(e), file=sys.stderr)
+        return 1
     print(f"Updated: {task_id}")
     print(f"Note: {note}")
     return 0
@@ -431,9 +475,16 @@ def _cmd_done(args: list[str]) -> int:
         print('       tasks archive <task-id> ["summary"]   (alias)', file=sys.stderr)
         return 1
     task_id, *rest = args
+    rc = _reject_flag_shape_task_id(task_id, "done")
+    if rc is not None:
+        return rc
     summary = " ".join(rest)
     _, repo = _ctx()
-    t = _tasks.complete_task(task_id, summary, repo)
+    try:
+        t = _tasks.complete_task(task_id, summary, repo)
+    except FileNotFoundError as e:
+        print(str(e), file=sys.stderr)
+        return 1
     dest = t.path
     if dest is not None:
         print(f"Archived: {t.id} → {dest}")
@@ -449,9 +500,16 @@ def _cmd_describe(args: list[str]) -> int:
         print('Usage: tasks describe <task-id> "description text"', file=sys.stderr)
         return 1
     task_id, *rest = args
+    rc = _reject_flag_shape_task_id(task_id, "describe")
+    if rc is not None:
+        return rc
     text = " ".join(rest)
     _, repo = _ctx()
-    t = _tasks.set_description(task_id, text, repo)
+    try:
+        t = _tasks.set_description(task_id, text, repo)
+    except FileNotFoundError as e:
+        print(str(e), file=sys.stderr)
+        return 1
     print(f"Described: {t.id}")
     return 0
 
@@ -460,6 +518,9 @@ def _cmd_show(args: list[str]) -> int:
     if not args:
         print("Usage: tasks show <task-id>", file=sys.stderr)
         return 1
+    rc = _reject_flag_shape_task_id(args[0], "show")
+    if rc is not None:
+        return rc
     _, repo = _ctx()
     path = _tasks._find_task_file(args[0])
     if path is None:
