@@ -94,3 +94,70 @@ def test_send_body_containing_double_dash_mid_text_succeeds(capsys, tmp_paths):
 
     assert rc == 0
     assert sent_calls[0][2] == "ran git log --oneline --since=yesterday — 5 commits"
+
+
+@pytest.mark.parametrize(
+    "bad_target",
+    ["-x", "-tag", "--to", "--body"],
+)
+def test_send_rejects_single_dash_target(capsys, tmp_paths, bad_target):
+    """Tighten the existing ``--`` guard to ``-`` — no legitimate
+    target ever starts with a dash (targets are ``@name``, ``!label``,
+    or ``<scope-rel>``). Catches the short-flag confabulation shape
+    (``-x``, ``-tag``) the same way ``--`` catches long-flag shapes."""
+    rc = cli_msgs._cmd_send([bad_target, "!info", "body text"])
+    assert rc == 1
+    _, err = capsys.readouterr()
+    assert bad_target in err
+    assert "looks like a flag" in err
+
+
+@pytest.mark.parametrize(
+    "op,handler,args",
+    [
+        ("reply", cli_msgs._cmd_reply, ["--bogus", "response"]),
+        ("done", cli_msgs._cmd_done, ["--bogus", "note"]),
+        ("read", cli_msgs._cmd_read, ["--bogus"]),
+        ("status", cli_msgs._cmd_status, ["--bogus"]),
+    ],
+)
+def test_msg_id_ops_reject_flag_shape(capsys, tmp_paths, op, handler, args):
+    """``reply`` / ``done`` / ``read`` / ``status`` previously raised an
+    uncaught ``FileNotFoundError`` (ugly traceback) when given a
+    flag-shaped msg-id. Reject up front with a clean stderr line so
+    the user sees what went wrong, not a Python stacktrace."""
+    rc = handler(args)
+    assert rc == 1
+    _, err = capsys.readouterr()
+    assert "--bogus" in err
+    assert "looks like a flag" in err
+    assert op in err
+
+
+@pytest.mark.parametrize(
+    "op,handler,args,patch_target",
+    [
+        ("reply", cli_msgs._cmd_reply, ["msg-missing-9999", "response"],
+         "reply_to_message"),
+        ("done", cli_msgs._cmd_done, ["msg-missing-9999", "note"],
+         "mark_done"),
+        ("read", cli_msgs._cmd_read, ["msg-missing-9999"],
+         "mark_read"),
+    ],
+)
+def test_msg_id_ops_clean_error_for_missing(
+    capsys, tmp_paths, op, handler, args, patch_target,
+):
+    """Real (non-flag) msg-id that doesn't exist on disk: previously
+    surfaced as an uncaught ``FileNotFoundError`` traceback. Now caught
+    → rc=1 + the error message on stderr."""
+    def raise_nf(*_a, **_kw):
+        raise FileNotFoundError(f"message {args[0]} not found")
+
+    with mock.patch.object(cli_msgs._msgs, patch_target, side_effect=raise_nf):
+        rc = handler(args)
+
+    assert rc == 1
+    _, err = capsys.readouterr()
+    assert args[0] in err
+    assert "not found" in err

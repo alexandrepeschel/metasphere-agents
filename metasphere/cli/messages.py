@@ -44,6 +44,37 @@ def _ctx():
     return p, resolve_agent_id(p)
 
 
+_USAGE_HINTS = {
+    "send": 'Use: messages send @target !label "message"',
+    "reply": 'Use: messages reply <msg-id> "response"',
+    "done": 'Use: messages done <msg-id> ["note"]',
+    "read": "Use: messages read <msg-id>",
+    "status": "Use: messages status <msg-id>",
+}
+
+
+def _reject_flag_shape(value: str, role: str, op: str) -> int | None:
+    """Return rc=1 + print error if ``value`` looks like a leaked CLI flag.
+
+    Catches both ``--foo`` and ``-x``: msg-ids, targets, and labels
+    never legitimately start with ``-``. Same shape as the rejects in
+    ``agents._validate_agent_name`` / ``project._validate_name`` —
+    centralized here because ``msg`` commands use bare positional
+    parsing (no argparse) and have to gate manually.
+    """
+    if value.startswith("-"):
+        hint = _USAGE_HINTS.get(op, "")
+        msg = (
+            f"Error: {role} {value!r} looks like a flag — `msg {op}` "
+            "takes positional args only."
+        )
+        if hint:
+            msg = f"{msg} {hint}"
+        print(msg, file=sys.stderr)
+        return 1
+    return None
+
+
 def _print_inbox(show_all: bool) -> int:
     p, _agent = _ctx()
     msgs = _msgs.collect_inbox(p.scope, p.repo, view=True)
@@ -81,23 +112,15 @@ def _cmd_send(args: list[str]) -> int:
     # goes out with ``to: --to``, ``label: @whatever``, and the real
     # body buried in the rest. Hard-fail so the corruption can't
     # silently ship (2026-05-05: @rage-changelog and @explorer both
-    # shipped this in the same morning).
-    if target.startswith("--"):
-        print(
-            f"Error: target {target!r} looks like a flag — `msg send` "
-            "takes positional args. Use: "
-            'messages send @target !label "message"',
-            file=sys.stderr,
-        )
-        return 1
-    if label.startswith("--"):
-        print(
-            f"Error: label {label!r} looks like a flag — `msg send` "
-            "takes positional args. Use: "
-            'messages send @target !label "message"',
-            file=sys.stderr,
-        )
-        return 1
+    # shipped this in the same morning). Single-dash (``-x``) is
+    # rejected too — same confabulation risk, no legitimate target /
+    # label ever starts with ``-``.
+    rc = _reject_flag_shape(target, "target", "send")
+    if rc is not None:
+        return rc
+    rc = _reject_flag_shape(label, "label", "send")
+    if rc is not None:
+        return rc
     body = " ".join(rest)
     p, agent = _ctx()
     msg = _msgs.send_message(target, label, body, agent, paths=p)
@@ -111,9 +134,16 @@ def _cmd_reply(args: list[str]) -> int:
         print('Usage: messages reply <msg-id> "response"', file=sys.stderr)
         return 1
     orig, *rest = args
+    rc = _reject_flag_shape(orig, "msg-id", "reply")
+    if rc is not None:
+        return rc
     body = " ".join(rest)
     p, agent = _ctx()
-    msg = _msgs.reply_to_message(orig, body, agent, paths=p)
+    try:
+        msg = _msgs.reply_to_message(orig, body, agent, paths=p)
+    except FileNotFoundError as e:
+        print(str(e), file=sys.stderr)
+        return 1
     print(f"Replied to {orig} → {msg.id}")
     return 0
 
@@ -123,9 +153,16 @@ def _cmd_done(args: list[str]) -> int:
         print('Usage: messages done <msg-id> ["note"]', file=sys.stderr)
         return 1
     orig, *rest = args
+    rc = _reject_flag_shape(orig, "msg-id", "done")
+    if rc is not None:
+        return rc
     note = " ".join(rest)
     p, agent = _ctx()
-    reply = _msgs.mark_done(orig, note, agent, paths=p)
+    try:
+        reply = _msgs.mark_done(orig, note, agent, paths=p)
+    except FileNotFoundError as e:
+        print(str(e), file=sys.stderr)
+        return 1
     if reply:
         print(f"Completed {orig}, notified → {reply.id}")
     else:
@@ -137,8 +174,15 @@ def _cmd_read(args: list[str]) -> int:
     if not args:
         print("Usage: messages read <msg-id>", file=sys.stderr)
         return 1
+    rc = _reject_flag_shape(args[0], "msg-id", "read")
+    if rc is not None:
+        return rc
     p, _ = _ctx()
-    msg = _msgs.mark_read(args[0], paths=p)
+    try:
+        msg = _msgs.mark_read(args[0], paths=p)
+    except FileNotFoundError as e:
+        print(str(e), file=sys.stderr)
+        return 1
     if msg.path:
         print(msg.path.read_text())
     return 0
@@ -174,6 +218,9 @@ def _cmd_status(args: list[str]) -> int:
                 print(f"- {agent}: {status_file.read_text().strip()}")
         return 0
     msg_id = args[0]
+    rc = _reject_flag_shape(msg_id, "msg-id", "status")
+    if rc is not None:
+        return rc
     path = _msgs._find_inbox_msg(msg_id, p.repo)
     if path is None:
         print(f"Message {msg_id} not found", file=sys.stderr)
