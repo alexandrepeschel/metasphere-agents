@@ -181,19 +181,21 @@ metasphere project chat <name> "msg" # Send to project Telegram topic
 
 ```bash
 metasphere agent list              # List all agents
-metasphere agent spawn @name \
-  --scope /path \
-  --task "description" \
-  --sandbox scoped                 # Spawn child agent
+metasphere agent spawn @name /scope/ "task description" [@parent] \
+  --authority "what the agent MAY do" \
+  --responsibility "what it MUST produce" \
+  --accountability "how the parent will verify on !done"
 ```
 
 Agents can be **ephemeral** (one-shot, run a task and exit) or **persistent** (long-running, with their own tmux session and respawn loop). Persistent agents have a `MISSION.md` that defines their ongoing purpose.
 
 ### Sandbox levels
 
+Each agent's sandbox is stored as a single keyword in `~/.metasphere/agents/@<name>/sandbox` and consumed by the heartbeat fallback that runs `claude -p` with a tool-allowlist matching the level:
+
 | Level | What the agent can do |
 |-------|----------------------|
-| `none` | Full access (default) |
+| `none` | Full access (default when the file is absent) |
 | `scoped` | Only files in its assigned directory |
 | `nobash` | Read/write/edit but no shell commands |
 | `readonly` | Only read and search — can't change anything |
@@ -214,15 +216,17 @@ When a session restarts, the watchdog automatically injects a continuation promp
 
 ## Scheduling
 
-```bash
-metasphere schedule add \
-  --name daily-summary \
-  --cron "0 9 * * *" \
-  --command "metasphere consolidate run"
+Cron jobs are YAML files at `~/.metasphere/cron/<id>.yaml`. The schedule daemon ticks once a minute and dispatches every job whose cron expression matches.
 
-metasphere schedule list           # Show scheduled jobs
-metasphere schedule remove <name>  # Remove a schedule
+```bash
+metasphere schedule list           # Show scheduled jobs (default with no args)
+metasphere schedule run            # Fire one tick now: dispatch matching jobs
+metasphere schedule enable <id>    # Re-enable a disabled job
+metasphere schedule disable <id>   # Disable a job (kept in registry, won't fire)
+metasphere schedule wire-exit-self # Append canonical exit-self tail to every job
 ```
+
+To add a job, create a YAML file at `~/.metasphere/cron/<id>.yaml` with the cron expression and the dispatch payload — the daemon picks it up on its next tick.
 
 ## Memory
 
@@ -240,11 +244,13 @@ From Telegram: `/memory <query>` searches the same index.
 ## System Management
 
 ```bash
-metasphere status                      # System overview
-metasphere daemon start|stop|restart   # Daemon control
-metasphere logs [gateway|events] [-f]  # View logs
+metasphere status                      # System overview (sessions, tasks, daemons)
+metasphere daemon start|stop|restart   # Daemon control (all three by default)
+metasphere logs [<service>] [-f]       # View logs; index when no service given
+                                       # Services: gateway, heartbeat, schedule,
+                                       # reaper, posthook, update, events
 metasphere update                      # Update from git (pull + reinstall + restart)
-metasphere config                      # Show configuration
+metasphere config telegram             # Wire up the Telegram bot token + chat id
 ```
 
 ## Telegram Bot Commands
