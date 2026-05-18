@@ -307,6 +307,12 @@ def _cmd_list(args: list[str]) -> int:
 
 
 def _cmd_new(args: list[str]) -> int:
+    if args and args[0] in ("--help", "-h"):
+        sys.stdout.write(
+            'Usage: metasphere task new "title" [!priority] '
+            "[--project <name>] [--assign @agent]\n"
+        )
+        return 0
     priority = _tasks.PRIORITY_DEFAULT
     explicit_project: str | None = None
     explicit_assign: str | None = None
@@ -342,6 +348,18 @@ def _cmd_new(args: list[str]) -> int:
             else:
                 explicit_assign = value
             i += 2
+        elif a.startswith("-"):
+            # Unknown flag-shaped positional. Used to be silently appended
+            # to the title — ``task new --boogus "x"`` would create a task
+            # titled ``--boogus x`` and slug ``boogus-x``. Reject so typos
+            # surface instead of polluting the task store.
+            print(
+                f"Error: unknown flag {a!r}; expected a title, a "
+                f"priority ({', '.join(_tasks.VALID_PRIORITIES)}), "
+                "--project, or --assign",
+                file=sys.stderr,
+            )
+            return 2
         else:
             title_parts.append(a)
             i += 1

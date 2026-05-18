@@ -358,6 +358,44 @@ def test_cli_new_rejects_bare_consume_next_flag(
 
 
 @pytest.mark.parametrize(
+    "args,bad_token",
+    [
+        (["--bogus"], "--bogus"),
+        (["--bogus", "real title"], "--bogus"),
+        (["-priority", "oops"], "-priority"),
+        (["title", "--unknown"], "--unknown"),
+    ],
+)
+def test_cli_new_rejects_unknown_flag_in_title(
+    tmp_paths, monkeypatch, capsys, args, bad_token
+):
+    """``task new --bogus`` used to absorb ``--bogus`` into the title
+    and write a real task with slug ``bogus``. Reject unknown
+    flag-shaped tokens instead."""
+    from metasphere.cli import tasks as cli_tasks
+    monkeypatch.setenv("METASPHERE_AGENT_ID", "@explorer")
+    rc = cli_tasks._cmd_new(args)
+    assert rc == 2
+    err = capsys.readouterr().err
+    assert bad_token in err
+    assert "unknown flag" in err
+    active = tmp_paths.scope / ".tasks" / "active"
+    assert not active.exists() or not list(active.glob("*.md"))
+
+
+def test_cli_new_help_flag_emits_usage(tmp_paths, monkeypatch, capsys):
+    """``task new --help`` used to fall through and emit the
+    missing-title usage line; surface a proper usage block instead."""
+    from metasphere.cli import tasks as cli_tasks
+    monkeypatch.setenv("METASPHERE_AGENT_ID", "@explorer")
+    rc = cli_tasks._cmd_new(["--help"])
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "Usage:" in out
+    assert "task new" in out
+
+
+@pytest.mark.parametrize(
     "bad_agent",
     ["--bogus", "@--bogus", "-x", "@-x", "", "   "],
 )
