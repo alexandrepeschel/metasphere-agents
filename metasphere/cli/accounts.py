@@ -34,6 +34,7 @@ Linux only. macOS short-circuits with a clear error.
 
 import argparse
 import os
+import re
 import shutil
 import sys
 import tempfile
@@ -49,6 +50,38 @@ LIVE_CRED = Path.home() / ".claude" / ".credentials.json"
 
 CRED_FILENAME = "credentials.json"
 SECURE_MODE = 0o600
+
+
+_NAME_INVALID_RE = re.compile(r"[/\\\x00]")
+
+
+def _validate_profile_name(name: str) -> None:
+    """Raise ``ValueError`` if ``name`` would be unsafe to register.
+
+    Same shape as ``project._validate_name`` /
+    ``agents._validate_agent_name``: argparse will reject a bare
+    ``--bogus`` as an unknown option, but ``accounts add -- --bogus``
+    happily makes ``--bogus`` a positional, and the previous code
+    would create ``~/.metasphere/accounts/--bogus/credentials.json``
+    on disk. Reject leading-dash, empty / whitespace-only, path
+    separators, and ``.``/``..``.
+    """
+    if not name or not name.strip():
+        raise ValueError("profile name must be non-empty")
+    if name.startswith("-"):
+        raise ValueError(
+            f"invalid profile name: {name!r} "
+            f"(must not start with '-' — looks like a CLI flag)"
+        )
+    if name in (".", ".."):
+        raise ValueError(
+            f"invalid profile name: {name!r} (must not be '.' or '..')"
+        )
+    if _NAME_INVALID_RE.search(name):
+        raise ValueError(
+            f"invalid profile name: {name!r} "
+            f"(must not contain /, \\, or null)"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -189,6 +222,11 @@ def cmd_current(args: argparse.Namespace) -> int:
 
 def cmd_switch(args: argparse.Namespace) -> int:
     name = args.name
+    try:
+        _validate_profile_name(name)
+    except ValueError as e:
+        sys.stderr.write(f"metasphere accounts switch: {e}\n")
+        return 2
     target = _profile_path(name)
     if not target.is_file():
         sys.stderr.write(
@@ -202,6 +240,11 @@ def cmd_switch(args: argparse.Namespace) -> int:
 
 def cmd_add(args: argparse.Namespace) -> int:
     name = args.name
+    try:
+        _validate_profile_name(name)
+    except ValueError as e:
+        sys.stderr.write(f"metasphere accounts add: {e}\n")
+        return 2
     dest = _profile_path(name)
     if dest.exists() and not args.force:
         sys.stderr.write(

@@ -336,3 +336,85 @@ def test_unknown_subcommand_returns_nonzero(sandbox, capsys):
         A.main(["bogus"])
     # argparse exits 2 on unknown choice.
     assert exc.value.code == 2
+
+
+# ---------------------------------------------------------------------------
+# Flag-shape / unsafe-name rejection (library + CLI)
+#
+# argparse catches a bare ``--bogus`` as unknown option, but
+# ``accounts add -- --bogus`` makes it a positional. Without the
+# validator, ``_profile_path('--bogus')`` would create
+# ``~/.metasphere/accounts/--bogus/credentials.json`` — a ghost
+# directory whose name starts with ``-`` and shadows shell globs.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "bad_name",
+    [
+        "",
+        "   ",
+        "-x",
+        "--bogus",
+        "--from",
+        ".",
+        "..",
+        "foo/bar",
+        "foo\\bar",
+        "foo\x00bar",
+    ],
+)
+def test_validate_profile_name_rejects(bad_name):
+    with pytest.raises(ValueError):
+        A._validate_profile_name(bad_name)
+
+
+@pytest.mark.parametrize("good_name", ["primary", "spare", "work-2", "a.b", "_x"])
+def test_validate_profile_name_accepts(good_name):
+    A._validate_profile_name(good_name)
+
+
+def test_add_rejects_flag_shaped_name(sandbox, capsys):
+    """``accounts add -- --bogus`` must hard-fail before any FS write,
+    not silently create ``accounts/--bogus/credentials.json``."""
+    rc = A.main(["add", "--", "--bogus"])
+    assert rc == 2
+    err = capsys.readouterr().err
+    assert "invalid profile name" in err
+    assert "'--bogus'" in err
+    # No ghost dir landed.
+    assert list(sandbox.accounts_dir.iterdir()) == []
+
+
+def test_add_rejects_path_separator(sandbox, capsys):
+    rc = A.main(["add", "foo/bar"])
+    assert rc == 2
+    err = capsys.readouterr().err
+    assert "invalid profile name" in err
+    assert list(sandbox.accounts_dir.iterdir()) == []
+
+
+def test_add_rejects_dot_names(sandbox, capsys):
+    rc = A.main(["add", ".."])
+    assert rc == 2
+    err = capsys.readouterr().err
+    assert "invalid profile name" in err
+    assert list(sandbox.accounts_dir.iterdir()) == []
+
+
+def test_switch_rejects_flag_shaped_name(sandbox, capsys):
+    """``accounts switch -- --bogus`` must hard-fail with a clean
+    error before touching the live-cred symlink."""
+    sandbox.seed_profile("primary")
+    rc = A.main(["switch", "--", "--bogus"])
+    assert rc == 2
+    err = capsys.readouterr().err
+    assert "invalid profile name" in err
+    # Live cred untouched (no link created).
+    assert not sandbox.live_cred.exists() and not sandbox.live_cred.is_symlink()
+
+
+def test_switch_rejects_path_separator(sandbox, capsys):
+    rc = A.main(["switch", "foo/bar"])
+    assert rc == 2
+    assert "invalid profile name" in capsys.readouterr().err
