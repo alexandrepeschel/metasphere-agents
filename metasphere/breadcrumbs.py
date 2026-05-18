@@ -102,22 +102,28 @@ def count_user_messages(transcript_path: Path | str | None) -> int:
        auto-compact handler when a session crosses the context
        budget. These do NOT fire UserPromptSubmit but ARE persisted
        to the transcript as ``type == "user"``.
-    4. Heartbeat injections — user messages whose text begins with
-       ``# HEARTBEAT``. The metasphere-heartbeat daemon injects these
-       directly into the agent's tmux pane on a ~5-minute cadence.
-       They DO fire UserPromptSubmit (writing a fresh breadcrumb) when
-       processed as their own turn, but they can also land in the
-       JSONL *during* an adjacent user turn's processing window,
-       inflating the Stop-time count by +1 and pushing the delta to
-       ≥2. Filtering them here keeps the gate stable.
+    4. Auto-injected nudges from the harness — heartbeat ticks
+       (``# HEARTBEAT ...``), post-restart wake-ups
+       (``[session restarted] ...``), and agent-to-agent wake notices
+       (``[wake] ...``). All three are injected by harness daemons via
+       :func:`metasphere.tmux.submit_to_tmux` with ``defer_if_busy=True``
+       and ``escape_prefix=False``. They DO fire UserPromptSubmit when
+       processed as their own turn, but they can also land in the JSONL
+       *during* an adjacent user turn's processing window — the
+       defer-if-busy probe is best-effort and races a turn that just
+       began but hasn't yet started a tool call. Each coincidence
+       inflates the Stop-time count by +1 and pushes the delta to ≥2.
+       Filtering them here keeps the gate stable.
 
     Counting (2), (3), or (4) inflates the Stop-time count above the
     UserPromptSubmit-time count, tripping the breadcrumb
     ``count-mismatch`` gate. (2) was first observed on tool-using
     turns; (3) was the cause of the recurring suppressions seen on
     @orchestrator across 2026-05 — every first-turn-after-compaction
-    silently dropped from Telegram; (4) observed 2026-05-18 when a
-    heartbeat landed during a multi-tool turn and pushed delta to 2.
+    silently dropped from Telegram; (4) was observed for the heartbeat
+    sentinel on 2026-05-18 (count-mismatch on Julian's "active vs idle"
+    reply). The wake-up and agent-wake sentinels share the exact same
+    inject shape, so they are filtered preemptively.
 
     Returns 0 when the transcript is missing, empty, unreadable, or has
     no user messages — the posthook treats 0 as "no transcript info"
@@ -154,7 +160,9 @@ def count_user_messages(transcript_path: Path | str | None) -> int:
                 for item in content
             ):
                 continue
-            # Skip heartbeat injections: text content starting with "# HEARTBEAT".
+            # Skip auto-injected harness nudges that share heartbeat's
+            # inject shape (defer_if_busy + escape_prefix=False) and so
+            # share the same mid-turn race risk.
             text = ""
             if isinstance(content, str):
                 text = content
@@ -163,7 +171,12 @@ def count_user_messages(transcript_path: Path | str | None) -> int:
                     if isinstance(item, dict) and item.get("type") == "text":
                         text = item.get("text") or ""
                         break
-            if text.lstrip().startswith("# HEARTBEAT "):
+            stripped = text.lstrip()
+            if (
+                stripped.startswith("# HEARTBEAT ")
+                or stripped.startswith("[session restarted]")
+                or stripped.startswith("[wake] ")
+            ):
                 continue
         n += 1
     return n

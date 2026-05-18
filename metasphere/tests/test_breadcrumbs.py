@@ -127,6 +127,59 @@ def test_count_user_messages_skips_heartbeat_injections(tmp_path: Path):
     assert _bc.count_user_messages(p) == 2
 
 
+def test_count_user_messages_skips_post_restart_wake(tmp_path: Path):
+    """Post-restart wake-ups (``[session restarted] ...``) share the
+    heartbeat inject shape (defer_if_busy + escape_prefix=False) and so
+    can race a real user turn the same way. Filter them too so a
+    restart that races a fresh user message doesn't trip the gate."""
+    p = tmp_path / "t.jsonl"
+    wake_text = "[session restarted] agent: @orchestrator, reason: stale-session. Check messages and tasks, resume where you left off."
+    p.write_text(
+        "\n".join([
+            json.dumps({"type": "user", "message": {"content": "real user message"}}),
+            json.dumps({"type": "user", "message": {"content": wake_text}}),
+            json.dumps({"type": "user", "message": {"content": [{"type": "text", "text": wake_text}]}}),
+        ]) + "\n",
+        encoding="utf-8",
+    )
+    assert _bc.count_user_messages(p) == 1
+
+
+def test_count_user_messages_skips_agent_wake_notice(tmp_path: Path):
+    """Agent-to-agent wake notices (``[wake] new task from @X: ...``) are
+    auto-injected by :func:`metasphere.messages.wake_recipient_if_live`
+    whenever a new message lands for a live agent. Same inject shape as
+    heartbeat, same race risk."""
+    p = tmp_path / "t.jsonl"
+    wake_text = "[wake] new task from @scheduler: polymarket:quick-scan — scheduled cron fire..."
+    p.write_text(
+        "\n".join([
+            json.dumps({"type": "user", "message": {"content": "real prompt"}}),
+            json.dumps({"type": "user", "message": {"content": wake_text}}),
+            json.dumps({"type": "user", "message": {"content": [{"type": "text", "text": wake_text}]}}),
+            json.dumps({"type": "user", "message": {"content": "another real prompt"}}),
+        ]) + "\n",
+        encoding="utf-8",
+    )
+    assert _bc.count_user_messages(p) == 2
+
+
+def test_count_user_messages_keeps_task_dispatch(tmp_path: Path):
+    """Scheduled-task wakes (``[task] ...``) ARE user-equivalent — they
+    represent a cron/operator-triggered intent that the agent should
+    process as a real turn. They MUST still be counted; only the
+    auto-nudges (heartbeat / restart-wake / agent-wake) get skipped."""
+    p = tmp_path / "t.jsonl"
+    p.write_text(
+        "\n".join([
+            json.dumps({"type": "user", "message": {"content": "[task] polymarket:daily-summary — scheduled run."}}),
+            json.dumps({"type": "user", "message": {"content": [{"type": "text", "text": "[task] another scheduled run"}]}}),
+        ]) + "\n",
+        encoding="utf-8",
+    )
+    assert _bc.count_user_messages(p) == 2
+
+
 def test_count_user_messages_handles_garbage_lines(tmp_path: Path):
     p = tmp_path / "t.jsonl"
     p.write_text(
