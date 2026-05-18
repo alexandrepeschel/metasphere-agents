@@ -42,6 +42,37 @@ from metasphere.session import (
 )
 
 
+_USAGE_HINTS = {
+    "info":    "Use: session info <@agent>",
+    "attach":  "Use: session attach <@agent>",
+    "stop":    "Use: session stop <@agent>",
+    "restart": "Use: session restart <@agent> [reason]",
+    "send":    "Use: session send <@agent> <message>",
+}
+
+
+def _reject_flag_shape(value: str, op: str) -> int | None:
+    """Return rc=2 + print error if ``value`` looks like a leaked CLI flag.
+
+    Mirrors ``msg._reject_flag_shape`` and ``agents._validate_agent_name``:
+    ``session info --help`` previously fell through to ``no session:
+    --help``, hiding the typo. Flag-shaped agents never resolve to a
+    live tmux session, but the misleading "no session" output is
+    indistinguishable from a real lookup miss.
+    """
+    if value.startswith("-"):
+        hint = _USAGE_HINTS.get(op, "")
+        msg = (
+            f"metasphere session {op}: {value!r} looks like a flag, "
+            f"not an agent id."
+        )
+        if hint:
+            msg = f"{msg} {hint}"
+        sys.stderr.write(msg + "\n")
+        return 2
+    return None
+
+
 def main(argv: list[str] | None = None) -> int:
     args = list(argv if argv is not None else sys.argv[1:])
     if args and args[0] in ("--help", "-h"):
@@ -66,6 +97,9 @@ def main(argv: list[str] | None = None) -> int:
         if not rest:
             print("usage: session info <@agent>", file=sys.stderr)
             return 2
+        rc = _reject_flag_shape(rest[0], "info")
+        if rc is not None:
+            return rc
         s = session_info(rest[0])
         if not s:
             print(f"no session: {rest[0]}", file=sys.stderr)
@@ -81,12 +115,18 @@ def main(argv: list[str] | None = None) -> int:
         if not rest:
             print("usage: session attach <@agent>", file=sys.stderr)
             return 2
+        rc = _reject_flag_shape(rest[0], "attach")
+        if rc is not None:
+            return rc
         return attach_to(rest[0])
 
     if cmd == "stop":
         if not rest:
             print("usage: session stop <@agent>", file=sys.stderr)
             return 2
+        rc = _reject_flag_shape(rest[0], "stop")
+        if rc is not None:
+            return rc
         ok = stop_session(rest[0])
         if ok:
             print(f"stopped {rest[0]}")
@@ -99,6 +139,9 @@ def main(argv: list[str] | None = None) -> int:
         if not rest:
             print("usage: session restart <@agent> [reason]", file=sys.stderr)
             return 2
+        rc = _reject_flag_shape(rest[0], "restart")
+        if rc is not None:
+            return rc
         agent = rest[0]
         reason = " ".join(rest[1:]) if len(rest) > 1 else "CLI restart"
         ok = restart_session(agent, reason)
@@ -113,6 +156,9 @@ def main(argv: list[str] | None = None) -> int:
         if len(rest) < 2:
             print("usage: session send <@agent> <message>", file=sys.stderr)
             return 2
+        rc = _reject_flag_shape(rest[0], "send")
+        if rc is not None:
+            return rc
         agent = rest[0]
         message = " ".join(rest[1:])
         ok = send_to_session(agent, message)
