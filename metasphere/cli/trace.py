@@ -68,7 +68,15 @@ def main(argv: list[str] | None = None) -> int:
             if a in ("--errors", "-e"):
                 errors_only = True
             elif a in ("--limit", "-n") and i + 1 < len(rest):
-                limit = int(rest[i + 1])
+                try:
+                    limit = int(rest[i + 1])
+                except ValueError:
+                    print(
+                        f"trace list: --limit expects an integer, got "
+                        f"{rest[i + 1]!r}",
+                        file=sys.stderr,
+                    )
+                    return 2
                 i += 1
             i += 1
         for t in list_traces(limit=limit, errors_only=errors_only, paths=paths):
@@ -87,7 +95,37 @@ def main(argv: list[str] | None = None) -> int:
         if not rest:
             print("usage: trace prune <days>", file=sys.stderr)
             return 2
-        n = prune_traces(int(rest[0]), paths=paths)
+        # Reject flag-shaped tokens so ``trace prune --help`` doesn't
+        # detonate inside ``int(...)`` and dump a traceback. Same class
+        # as the schedule.enable / spawn-name flag-leak guards.
+        if rest[0] in ("--help", "-h"):
+            sys.stdout.write(USAGE)
+            return 0
+        if rest[0].startswith("-") and not rest[0].lstrip("-").isdigit():
+            print(
+                f"trace prune: {rest[0]!r} looks like a CLI flag, not a "
+                f"day count",
+                file=sys.stderr,
+            )
+            return 2
+        try:
+            days = int(rest[0])
+        except ValueError:
+            print(
+                f"trace prune: <days> expects an integer, got {rest[0]!r}",
+                file=sys.stderr,
+            )
+            return 2
+        # Reject negative day counts: ``prune_traces(-N)`` would set the
+        # cutoff to today+N, which classifies *every* trace dir as
+        # "older than cutoff" and silently wipes the whole tree.
+        if days < 0:
+            print(
+                f"trace prune: <days> must be non-negative, got {days}",
+                file=sys.stderr,
+            )
+            return 2
+        n = prune_traces(days, paths=paths)
         print(f"removed {n} day-dirs")
         return 0
 
