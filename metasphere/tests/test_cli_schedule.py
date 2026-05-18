@@ -74,3 +74,55 @@ def test_top_level_help_unchanged(capsys):
     assert rc == 0
     out = capsys.readouterr().out
     assert "schedule" in out
+
+
+# ---------- daemon argv hardening ----------
+#
+# Same class as the consolidate run / trace prune / trace list /
+# session info hardening: a raw ``int(argv[0])`` on user-supplied argv
+# detonated on flag-shaped values, and a negative interval would
+# propagate to ``time.sleep`` and crash the daemon loop on the first
+# tick. The CLI boundary now catches and surfaces a clean rc=2.
+
+import pytest
+
+
+def test_daemon_help_prints_usage(capsys):
+    rc = cli.main(["daemon", "--help"])
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "schedule" in out
+    assert "daemon" in out
+
+
+def test_daemon_short_help_prints_usage(capsys):
+    rc = cli.main(["daemon", "-h"])
+    assert rc == 0
+    assert "daemon" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("bad", ["--bogus", "--unknown", "-x"])
+def test_daemon_rejects_flag_shaped_interval(bad, capsys):
+    rc = cli.main(["daemon", bad])
+    assert rc == 2
+    err = capsys.readouterr().err
+    assert "schedule daemon" in err
+    assert bad in err
+    assert "flag" in err.lower()
+
+
+@pytest.mark.parametrize("bad", ["abc", "3.5", ""])
+def test_daemon_rejects_non_int(bad, capsys):
+    rc = cli.main(["daemon", bad])
+    assert rc == 2
+    err = capsys.readouterr().err
+    assert "schedule daemon" in err
+    assert "integer" in err
+
+
+def test_daemon_rejects_negative_interval(capsys):
+    rc = cli.main(["daemon", "-5"])
+    assert rc == 2
+    err = capsys.readouterr().err
+    assert "schedule daemon" in err
+    assert "non-negative" in err

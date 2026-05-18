@@ -52,10 +52,35 @@ def main(argv: list[str] | None = None) -> int:
     if args[0] == "daemon":
         interval = 30
         if len(args) > 1:
+            raw = args[1]
+            if raw in ("--help", "-h"):
+                sys.stdout.write(USAGE)
+                return 0
+            # Reject flag-shaped intervals so ``heartbeat daemon --bogus``
+            # surfaces a clean rc=2 instead of the bare ``invalid interval:
+            # '--bogus'`` line. Same class as schedule.daemon / consolidate
+            # run / trace prune hardening.
+            if raw.startswith("-") and not raw.lstrip("-").isdigit():
+                print(
+                    f"heartbeat daemon: {raw!r} looks like a CLI flag, not an interval",
+                    file=sys.stderr,
+                )
+                return 2
             try:
-                interval = int(args[1])
+                interval = int(raw)
             except ValueError:
-                print(f"invalid interval: {args[1]}", file=sys.stderr)
+                print(
+                    f"heartbeat daemon: interval expects an integer, got {raw!r}",
+                    file=sys.stderr,
+                )
+                return 2
+            # A negative interval would crash ``time.sleep`` inside the
+            # daemon loop. Reject up-front.
+            if interval < 0:
+                print(
+                    f"heartbeat daemon: interval must be non-negative, got {interval}",
+                    file=sys.stderr,
+                )
                 return 2
         heartbeat_daemon(
             paths,

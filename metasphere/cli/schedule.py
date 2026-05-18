@@ -78,11 +78,37 @@ def _cmd_run() -> int:
 
 
 def _cmd_daemon(argv: list[str]) -> int:
+    if argv and argv[0] in ("--help", "-h"):
+        sys.stdout.write(USAGE)
+        return 0
     if argv:
+        raw = argv[0]
+        # Reject flag-shaped intervals so e.g. ``schedule daemon --bogus``
+        # surfaces a clean rc=2 instead of the bare ``invalid literal`` /
+        # ``got: '--bogus'`` confusion. Same class as the consolidate run
+        # / trace prune / trace list hardening (d51d613, eabb0f8).
+        if raw.startswith("-") and not raw.lstrip("-").isdigit():
+            print(
+                f"schedule daemon: {raw!r} looks like a CLI flag, not an interval",
+                file=sys.stderr,
+            )
+            return 2
         try:
-            interval = int(argv[0])
+            interval = int(raw)
         except ValueError:
-            print(f"usage: schedule daemon [interval-seconds]; got: {argv[0]!r}", file=sys.stderr)
+            print(
+                f"schedule daemon: interval expects an integer, got {raw!r}",
+                file=sys.stderr,
+            )
+            return 2
+        # A negative interval would propagate to ``time.sleep`` and crash
+        # the loop on the first tick. Reject up-front so the operator
+        # gets a CLI error, not a daemon traceback.
+        if interval < 0:
+            print(
+                f"schedule daemon: interval must be non-negative, got {interval}",
+                file=sys.stderr,
+            )
             return 2
     else:
         interval = 60
