@@ -102,13 +102,22 @@ def count_user_messages(transcript_path: Path | str | None) -> int:
        auto-compact handler when a session crosses the context
        budget. These do NOT fire UserPromptSubmit but ARE persisted
        to the transcript as ``type == "user"``.
+    4. Heartbeat injections — user messages whose text begins with
+       ``# HEARTBEAT``. The metasphere-heartbeat daemon injects these
+       directly into the agent's tmux pane on a ~5-minute cadence.
+       They DO fire UserPromptSubmit (writing a fresh breadcrumb) when
+       processed as their own turn, but they can also land in the
+       JSONL *during* an adjacent user turn's processing window,
+       inflating the Stop-time count by +1 and pushing the delta to
+       ≥2. Filtering them here keeps the gate stable.
 
-    Counting (2) or (3) inflates the Stop-time count above the
+    Counting (2), (3), or (4) inflates the Stop-time count above the
     UserPromptSubmit-time count, tripping the breadcrumb
     ``count-mismatch`` gate. (2) was first observed on tool-using
     turns; (3) was the cause of the recurring suppressions seen on
     @orchestrator across 2026-05 — every first-turn-after-compaction
-    silently dropped from Telegram.
+    silently dropped from Telegram; (4) observed 2026-05-18 when a
+    heartbeat landed during a multi-tool turn and pushed delta to 2.
 
     Returns 0 when the transcript is missing, empty, unreadable, or has
     no user messages — the posthook treats 0 as "no transcript info"
@@ -144,6 +153,17 @@ def count_user_messages(transcript_path: Path | str | None) -> int:
                 isinstance(item, dict) and item.get("type") == "tool_result"
                 for item in content
             ):
+                continue
+            # Skip heartbeat injections: text content starting with "# HEARTBEAT".
+            text = ""
+            if isinstance(content, str):
+                text = content
+            elif isinstance(content, list):
+                for item in content:
+                    if isinstance(item, dict) and item.get("type") == "text":
+                        text = item.get("text") or ""
+                        break
+            if text.lstrip().startswith("# HEARTBEAT "):
                 continue
         n += 1
     return n

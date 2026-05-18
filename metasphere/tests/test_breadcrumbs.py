@@ -104,6 +104,29 @@ def test_count_user_messages_skips_compact_summary(tmp_path: Path):
     assert _bc.count_user_messages(p) == 2
 
 
+def test_count_user_messages_skips_heartbeat_injections(tmp_path: Path):
+    """Heartbeat injections landing during a multi-tool turn must not inflate
+    the Stop-time count. Regression: 2026-05-18 count-mismatch suppression
+    when a heartbeat landed mid-turn, pushing delta to 2."""
+    p = tmp_path / "t.jsonl"
+    heartbeat_text = "# HEARTBEAT 2026-05-18T15:51:14Z (@orchestrator)\n\nSome context..."
+    p.write_text(
+        "\n".join([
+            # Real user message
+            json.dumps({"type": "user", "message": {"content": "do the thing"}}),
+            # Heartbeat as plain-string content
+            json.dumps({"type": "user", "message": {"content": heartbeat_text}}),
+            # Heartbeat as list-of-text-block content
+            json.dumps({"type": "user", "message": {"content": [{"type": "text", "text": heartbeat_text}]}}),
+            # Another real user message
+            json.dumps({"type": "user", "message": {"content": "follow up"}}),
+        ]) + "\n",
+        encoding="utf-8",
+    )
+    # Only the two real user messages should count; both heartbeat forms skipped
+    assert _bc.count_user_messages(p) == 2
+
+
 def test_count_user_messages_handles_garbage_lines(tmp_path: Path):
     p = tmp_path / "t.jsonl"
     p.write_text(
