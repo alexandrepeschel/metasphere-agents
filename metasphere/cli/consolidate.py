@@ -34,35 +34,90 @@ Defaults:
 """
 
 
+def _parse_int_flag(
+    flag: str, raw: str, *, allow_negative: bool = False
+) -> int:
+    """Parse an integer value for ``--flag`` with CLI-shaped errors.
+
+    Raises ``ValueError`` with a message ready for stderr. Callers catch
+    and return rc=2. Centralises the flag-shape / non-int / negative
+    rejections that trace.prune / trace.list already do inline so the
+    behaviour is consistent across consolidate's two int-valued flags.
+    """
+    if raw.startswith("-") and not raw.lstrip("-").isdigit():
+        raise ValueError(
+            f"consolidate run: {raw!r} looks like a CLI flag, not a "
+            f"value for {flag}"
+        )
+    try:
+        n = int(raw)
+    except ValueError:
+        raise ValueError(
+            f"consolidate run: {flag} expects an integer, got {raw!r}"
+        )
+    if not allow_negative and n < 0:
+        raise ValueError(
+            f"consolidate run: {flag} must be non-negative, got {n}"
+        )
+    return n
+
+
+def _take_value(flag: str, argv: list[str], i: int) -> str:
+    """Return the value following ``--flag`` at position ``i+1``.
+
+    Raises ``ValueError`` if the flag was the last token. Same shape as
+    ``_parse_int_flag`` so the caller can render a single rc=2 path.
+    """
+    if i + 1 >= len(argv):
+        raise ValueError(f"consolidate run: {flag} expects a value")
+    return argv[i + 1]
+
+
 def _cmd_run(argv: list[str]) -> int:
     dry_run = False
     since = _con.DEFAULT_SINCE
     stale_window = _con.STALE_WINDOW_MINUTES_DEFAULT
     info_archive_after: int | None = None
     i = 0
-    while i < len(argv):
-        a = argv[i]
-        if a == "--dry-run":
-            dry_run = True
-        elif a == "--since":
+    try:
+        while i < len(argv):
+            a = argv[i]
+            if a == "--dry-run":
+                dry_run = True
+            elif a in ("--help", "-h"):
+                sys.stdout.write(USAGE)
+                return 0
+            elif a == "--since":
+                since = _take_value("--since", argv, i)
+                i += 1
+            elif a.startswith("--since="):
+                since = a.split("=", 1)[1]
+            elif a == "--stale-window":
+                stale_window = _parse_int_flag(
+                    "--stale-window", _take_value("--stale-window", argv, i)
+                )
+                i += 1
+            elif a.startswith("--stale-window="):
+                stale_window = _parse_int_flag(
+                    "--stale-window", a.split("=", 1)[1]
+                )
+            elif a == "--info-archive-after":
+                info_archive_after = _parse_int_flag(
+                    "--info-archive-after",
+                    _take_value("--info-archive-after", argv, i),
+                )
+                i += 1
+            elif a.startswith("--info-archive-after="):
+                info_archive_after = _parse_int_flag(
+                    "--info-archive-after", a.split("=", 1)[1]
+                )
+            else:
+                print(f"unknown arg: {a}", file=sys.stderr)
+                return 2
             i += 1
-            since = argv[i]
-        elif a.startswith("--since="):
-            since = a.split("=", 1)[1]
-        elif a == "--stale-window":
-            i += 1
-            stale_window = int(argv[i])
-        elif a.startswith("--stale-window="):
-            stale_window = int(a.split("=", 1)[1])
-        elif a == "--info-archive-after":
-            i += 1
-            info_archive_after = int(argv[i])
-        elif a.startswith("--info-archive-after="):
-            info_archive_after = int(a.split("=", 1)[1])
-        else:
-            print(f"unknown arg: {a}", file=sys.stderr)
-            return 2
-        i += 1
+    except ValueError as e:
+        print(str(e), file=sys.stderr)
+        return 2
 
     paths = _paths.resolve()
     # The info_archive_after override is threaded through a module-level
