@@ -108,6 +108,111 @@ def test_extract_last_assistant_text_only_tool_use(tmp_path: Path):
     assert posthook.extract_last_assistant_text(transcript) is None
 
 
+def test_extract_last_assistant_text_pre_tool_text_captured(tmp_path: Path):
+    """Pre-tool text from an earlier assistant entry must reach Telegram.
+
+    Regression: extract_last_assistant_text previously returned only the
+    final assistant entry's text. When a turn had text before tool calls
+    (entry N) and text after (entry N+2), only the N+2 segment was
+    forwarded. The N text was silently dropped.
+    """
+    transcript = tmp_path / "t.jsonl"
+    _write_jsonl(
+        transcript,
+        [
+            # genuine human message — turn boundary
+            {"type": "user", "message": {"content": [{"type": "text", "text": "go"}]}},
+            # first assistant entry: text + tool call
+            {
+                "type": "assistant",
+                "message": {
+                    "content": [
+                        {"type": "text", "text": "pre-tool explanation"},
+                        {"type": "tool_use", "name": "Write", "id": "t1"},
+                    ]
+                },
+            },
+            # tool result — intra-turn splice, NOT a turn boundary
+            {
+                "type": "user",
+                "message": {
+                    "content": [{"type": "tool_result", "tool_use_id": "t1", "content": "ok"}]
+                },
+            },
+            # second assistant entry: post-tool text
+            {
+                "type": "assistant",
+                "message": {
+                    "content": [{"type": "text", "text": "post-tool text"}]
+                },
+            },
+        ],
+    )
+    text = posthook.extract_last_assistant_text(transcript)
+    assert text is not None
+    assert "pre-tool explanation" in text
+    assert "post-tool text" in text
+
+
+def test_extract_last_assistant_text_pre_tool_only(tmp_path: Path):
+    """Turn that ends on a tool call with no post-tool text still forwards
+    the pre-tool explanation."""
+    transcript = tmp_path / "t.jsonl"
+    _write_jsonl(
+        transcript,
+        [
+            {"type": "user", "message": {"content": [{"type": "text", "text": "go"}]}},
+            {
+                "type": "assistant",
+                "message": {
+                    "content": [
+                        {"type": "text", "text": "doing the thing"},
+                        {"type": "tool_use", "name": "Bash", "id": "t1"},
+                    ]
+                },
+            },
+            {
+                "type": "user",
+                "message": {
+                    "content": [{"type": "tool_result", "tool_use_id": "t1", "content": "ok"}]
+                },
+            },
+            # final assistant entry: tool call only, no text
+            {
+                "type": "assistant",
+                "message": {"content": [{"type": "tool_use", "name": "Bash", "id": "t2"}]},
+            },
+        ],
+    )
+    text = posthook.extract_last_assistant_text(transcript)
+    assert text == "doing the thing"
+
+
+def test_extract_last_assistant_text_prior_turn_not_included(tmp_path: Path):
+    """Text from the previous human turn must not bleed into the current one."""
+    transcript = tmp_path / "t.jsonl"
+    _write_jsonl(
+        transcript,
+        [
+            # previous turn
+            {"type": "user", "message": {"content": [{"type": "text", "text": "first"}]}},
+            {
+                "type": "assistant",
+                "message": {"content": [{"type": "text", "text": "old reply"}]},
+            },
+            # current turn — genuine human message is the boundary
+            {"type": "user", "message": {"content": [{"type": "text", "text": "second"}]}},
+            {
+                "type": "assistant",
+                "message": {"content": [{"type": "text", "text": "new reply"}]},
+            },
+        ],
+    )
+    text = posthook.extract_last_assistant_text(transcript)
+    assert text == "new reply"
+    assert "old reply" not in text
+
+
 # ---------- should_skip_silent_tick ----------
 
 def test_should_skip_silent_tick():

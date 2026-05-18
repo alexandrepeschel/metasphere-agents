@@ -46,11 +46,16 @@ def read_stop_hook_payload(stdin_bytes: bytes) -> dict:
 
 
 def extract_last_assistant_text(transcript_path: Path) -> str | None:
-    """Walk a JSONL transcript backwards and return the most recent
-    assistant message's concatenated text content.
+    """Walk a JSONL transcript backwards and return the assistant text
+    from the most recent user turn.
 
-    Returns ``None`` if the file is missing, empty, or contains no
-    assistant message with text blocks.
+    Collects text from ALL assistant entries within the same turn so that
+    text emitted before tool calls is not silently dropped. A "turn" is
+    bounded by the preceding genuine human message (a ``user`` entry whose
+    content is not exclusively ``tool_result`` blocks).
+
+    Returns ``None`` if the file is missing, empty, or the turn produced
+    no assistant text at all.
     """
     p = Path(transcript_path)
     if not p.exists():
@@ -59,6 +64,10 @@ def extract_last_assistant_text(transcript_path: Path) -> str | None:
         lines = p.read_text(encoding="utf-8", errors="replace").splitlines()
     except OSError:
         return None
+
+    # Collect text segments in reverse order; reverse again before joining.
+    segments: list[str] = []
+
     for line in reversed(lines):
         line = line.strip()
         if not line:
@@ -67,24 +76,40 @@ def extract_last_assistant_text(transcript_path: Path) -> str | None:
             obj = json.loads(line)
         except json.JSONDecodeError:
             continue
-        if obj.get("type") != "assistant":
-            continue
-        msg = obj.get("message") or {}
-        content = msg.get("content")
-        if not isinstance(content, list):
-            continue
-        parts: list[str] = []
-        for block in content:
-            if isinstance(block, dict) and block.get("type") == "text":
-                t = block.get("text") or ""
-                if t:
-                    parts.append(t)
-        if parts:
-            return "\n".join(parts)
-        # No text blocks on the last assistant turn — turn ended on a
-        # tool call. Treat as silent and stop walking.
+
+        msg_type = obj.get("type")
+
+        if msg_type == "assistant":
+            msg = obj.get("message") or {}
+            content = msg.get("content")
+            if not isinstance(content, list):
+                continue
+            parts: list[str] = []
+            for block in content:
+                if isinstance(block, dict) and block.get("type") == "text":
+                    t = block.get("text") or ""
+                    if t:
+                        parts.append(t)
+            if parts:
+                segments.append("\n".join(parts))
+
+        elif msg_type == "user":
+            # Stop at a genuine human turn. Tool-result entries (content is
+            # exclusively tool_result blocks) are intra-turn plumbing — keep
+            # walking backward through them.
+            msg = obj.get("message") or {}
+            content = msg.get("content")
+            if isinstance(content, list) and content and all(
+                isinstance(b, dict) and b.get("type") == "tool_result"
+                for b in content
+            ):
+                continue  # tool-result splice — still within the current turn
+            break  # genuine human message — turn boundary reached
+
+    if not segments:
         return None
-    return None
+    # segments collected in reverse order; restore chronological sequence.
+    return "\n\n".join(reversed(segments))
 
 
 # ---------- silent-tick filter ----------
