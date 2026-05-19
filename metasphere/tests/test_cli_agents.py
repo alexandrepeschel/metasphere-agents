@@ -177,6 +177,59 @@ def test_read_side_rejects_unknown_args(
     assert extra in err
 
 
+@pytest.mark.parametrize(
+    "argv,expected_msg",
+    [
+        (
+            ["@x", "/", "task", "--bogus"],
+            "parent '--bogus' looks like a flag",
+        ),
+        (
+            ["@x", "/", "task", "-p"],
+            "parent '-p' looks like a flag",
+        ),
+    ],
+)
+def test_spawn_rejects_flag_shaped_parent(
+    tmp_paths: Paths, capsys, monkeypatch, argv, expected_msg,
+):
+    """``metasphere agent spawn @x / "task" --bogus`` previously took
+    ``--bogus`` as the parent agent and proceeded with the spawn. Now
+    rejected as rc=2 before any agent dir is materialized. Mirrors the
+    wake-side trailing-flag guard (27dccc4); spawn was excluded from
+    that commit's scope.
+    """
+    monkeypatch.setenv("METASPHERE_SPAWN_NO_EXEC", "1")
+    rc = cli_agents.spawn_main(argv)
+    _, err = capsys.readouterr()
+    assert rc == 2
+    assert expected_msg in err
+    assert not (tmp_paths.agents / "@x").exists()
+
+
+@pytest.mark.parametrize(
+    "argv,kind,extra",
+    [
+        (["@x", "/", "task", "@parent", "--bogus"], "flag", "--bogus"),
+        (["@x", "/", "task", "@parent", "extra-positional"],
+         "argument", "extra-positional"),
+    ],
+)
+def test_spawn_rejects_trailing_argv_past_parent(
+    tmp_paths: Paths, capsys, monkeypatch, argv, kind, extra,
+):
+    """Any argv beyond position 3 (after agent_id, scope, task, parent)
+    is almost always a typo'd flag or stray token. Rejected as rc=2
+    before any agent dir is materialized.
+    """
+    monkeypatch.setenv("METASPHERE_SPAWN_NO_EXEC", "1")
+    rc = cli_agents.spawn_main(argv)
+    _, err = capsys.readouterr()
+    assert rc == 2
+    assert f"unexpected trailing {kind}: {extra}" in err
+    assert not (tmp_paths.agents / "@x").exists()
+
+
 def test_wake_rejects_trailing_flag(tmp_paths: Paths, capsys):
     """``metasphere agent wake @x "task" --bogus`` previously silently
     dropped the ``--bogus`` and proceeded with the wake. Now rejected

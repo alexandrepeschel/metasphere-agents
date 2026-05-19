@@ -144,6 +144,27 @@ def spawn_main(argv: list[str] | None = None) -> int:
         return 1
     agent_id, scope_path, task = argv[0], argv[1], argv[2]
     parent = argv[3] if len(argv) >= 4 else "@orchestrator"
+    if len(argv) >= 4 and argv[3].startswith("-"):
+        # Pre-hardening, `spawn @x /scope/ "task" --bogus` silently
+        # took --bogus as the parent agent. Catch the flag-shaped typo
+        # before any spawn side effects. Mirrors the wake-side guard
+        # in 27dccc4; spawn was excluded from that commit's scope.
+        print(
+            f"metasphere agent spawn: parent '{argv[3]}' looks like a flag, "
+            f"not an agent name.\n"
+            f"Usage: metasphere agent spawn @agent /scope/ \"task\" [@parent]",
+            file=sys.stderr,
+        )
+        return 2
+    if len(argv) > 4:
+        extra = argv[4]
+        kind = "flag" if extra.startswith("-") else "argument"
+        print(
+            f"metasphere agent spawn: unexpected trailing {kind}: {extra}\n"
+            f"Usage: metasphere agent spawn @agent /scope/ \"task\" [@parent]",
+            file=sys.stderr,
+        )
+        return 2
 
     # Pre-check the agent name before the contract-warning nudge so a
     # flag-shaped typo (`metasphere agent spawn --bogus ...`) doesn't
