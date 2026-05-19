@@ -78,6 +78,14 @@ def main(argv: list[str] | None = None) -> int:
     if args and args[0] in ("--help", "-h"):
         sys.stdout.write(USAGE)
         return 0
+    if args:
+        head = args[0]
+        kind = "flag" if head.startswith("-") else "argument"
+        sys.stderr.write(
+            f"metasphere version: unexpected {kind}: {head}\n"
+            f"Usage: metasphere version (takes no arguments)\n"
+        )
+        return 2
     print(f"metasphere {_resolve_version()}")
     print(f"commit: {_head_hash()}")
     return 0

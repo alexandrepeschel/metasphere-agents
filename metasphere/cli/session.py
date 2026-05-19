@@ -84,6 +84,14 @@ def main(argv: list[str] | None = None) -> int:
     cmd, *rest = args
 
     if cmd in ("list", "ls"):
+        if rest:
+            head = rest[0]
+            kind = "flag" if head.startswith("-") else "argument"
+            sys.stderr.write(
+                f"metasphere session list: unexpected {kind}: {head}\n"
+                f"Usage: metasphere session list (takes no arguments)\n"
+            )
+            return 2
         rows = list_sessions()
         if not rows:
             print("(no metasphere sessions)")
@@ -100,6 +108,14 @@ def main(argv: list[str] | None = None) -> int:
         rc = _reject_flag_shape(rest[0], "info")
         if rc is not None:
             return rc
+        if len(rest) > 1:
+            head = rest[1]
+            kind = "flag" if head.startswith("-") else "argument"
+            sys.stderr.write(
+                f"metasphere session info: unexpected trailing {kind}: {head}\n"
+                f"Usage: metasphere session info <@agent>\n"
+            )
+            return 2
         s = session_info(rest[0])
         if not s:
             print(f"no session: {rest[0]}", file=sys.stderr)

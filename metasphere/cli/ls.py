@@ -426,6 +426,23 @@ def main(argv: list[str]) -> int:
         sys.stdout.write(USAGE)
         return 0
 
+    # Reject unknown trailing args before any rendering. The pre-
+    # hardening path silently dropped ``--bogus`` (and other extras
+    # past the single positional) and printed the full landscape as
+    # if the typo applied.
+    def _reject(head: str) -> int:
+        kind = "flag" if head.startswith("-") else "argument"
+        sys.stderr.write(
+            f"metasphere ls: unexpected {kind}: {head}\n"
+            f"Usage: metasphere ls [@agent | <project>]\n"
+        )
+        return 2
+
+    if argv and argv[0].startswith("-"):
+        return _reject(argv[0])
+    if len(argv) > 1:
+        return _reject(argv[1])
+
     paths = _paths.resolve()
     c = _C(_tty())
     lines: list[str] = []
@@ -436,7 +453,7 @@ def main(argv: list[str]) -> int:
         sys.stdout.write("\n".join(lines) + "\n")
         return rc
 
-    project_filter = argv[0] if argv and not argv[0].startswith("-") else None
+    project_filter = argv[0] if argv else None
 
     # Top-level landscape
     lines.append(f"{c.bold}Metasphere{c.nc} {_time_display(paths)}")

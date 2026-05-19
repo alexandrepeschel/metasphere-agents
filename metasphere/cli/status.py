@@ -23,6 +23,18 @@ def main(argv: list[str] | None = None) -> int:
     if argv and argv[0] in ("--help", "-h"):
         sys.stdout.write(USAGE)
         return 0
+    if argv:
+        # ``metasphere status`` takes no arguments. The pre-hardening
+        # path silently dropped any extras (``status --bogus`` → rc=0
+        # with the full summary). Reject so typos surface instead of
+        # masquerading as success.
+        head = argv[0]
+        kind = "flag" if head.startswith("-") else "argument"
+        sys.stderr.write(
+            f"metasphere status: unexpected {kind}: {head}\n"
+            f"Usage: metasphere status (takes no arguments)\n"
+        )
+        return 2
     from metasphere.status import summary
     sys.stdout.write(summary() + "\n")
     return 0

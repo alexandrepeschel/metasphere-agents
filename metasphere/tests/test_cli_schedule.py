@@ -126,3 +126,20 @@ def test_daemon_rejects_negative_interval(capsys):
     err = capsys.readouterr().err
     assert "schedule daemon" in err
     assert "non-negative" in err
+
+
+@pytest.mark.parametrize("argv,extra", [
+    (["list", "--bogus"], "--bogus"),
+    (["list", "worldwire", "--bogus"], "--bogus"),
+    (["list", "worldwire", "extra-positional"], "extra-positional"),
+])
+def test_list_rejects_unknown_args(capsys, argv, extra):
+    """``schedule list`` previously took ``rest[0]`` as project_filter
+    if not flag-shaped, and silently dropped everything else (incl.
+    ``--bogus``). Now rc=2 surfaces the typo before listing.
+    """
+    rc = cli.main(argv)
+    _, err = capsys.readouterr()
+    assert rc == 2
+    assert "schedule list" in err
+    assert extra in err

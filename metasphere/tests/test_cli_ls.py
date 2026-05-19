@@ -131,3 +131,25 @@ def test_ls_dispatcher_registers_ls(capsys):
     """Regression: ``metasphere ls`` must not route to a not-ported stub."""
     assert main_mod.REGISTRY["ls"] == "metasphere.cli.ls:main"
     assert "not_ported" not in main_mod.REGISTRY["ls"]
+
+
+@pytest.mark.parametrize(
+    "argv,extra",
+    [
+        (["--bogus"], "--bogus"),
+        (["--filter=foo"], "--filter=foo"),
+        (["worldwire", "--bogus"], "--bogus"),
+        (["@orchestrator", "--bogus"], "--bogus"),
+        (["worldwire", "extra-positional"], "extra-positional"),
+    ],
+)
+def test_ls_rejects_unknown_trailing_args(tmp_paths, capsys, argv, extra):
+    """``ls --bogus`` previously silently dropped the typo and printed
+    the full landscape with rc=0. Now rc=2 before any rendering.
+    """
+    rc = ls_mod.main(argv)
+    out, err = capsys.readouterr()
+    assert rc == 2
+    assert out == ""
+    assert "metasphere ls:" in err
+    assert extra in err

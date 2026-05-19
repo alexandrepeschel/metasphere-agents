@@ -94,3 +94,18 @@ def test_list_valid_limit_runs(capsys):
     """Smoke: a valid --limit value doesn't trip the new guard."""
     rc = T.main(["list", "--limit", "5"])
     assert rc == 0
+
+
+@pytest.mark.parametrize("argv,extra", [
+    (["list", "--bogus"], "--bogus"),
+    (["list", "--errors", "--bogus"], "--bogus"),
+    (["list", "extra-positional"], "extra-positional"),
+])
+def test_list_rejects_unknown_args(capsys, argv, extra):
+    """``trace list`` previously silently dropped unknown flags/args
+    (the parse loop ``else: i += 1`` branch). Now rc=2."""
+    rc = T.main(argv)
+    _, err = capsys.readouterr()
+    assert rc == 2
+    assert "trace list" in err
+    assert extra in err

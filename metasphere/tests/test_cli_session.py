@@ -87,3 +87,33 @@ def test_real_agent_id_passes_through(capsys):
         rc = cli.main(["info", "@foo"])
     assert rc == 1
     m.assert_called_once_with("@foo")
+
+
+@pytest.mark.parametrize("argv,extra", [
+    (["list", "--bogus"], "--bogus"),
+    (["list", "extra"], "extra"),
+])
+def test_list_rejects_unknown_args(capsys, argv, extra):
+    """``session list`` takes no arguments; pre-hardening silently
+    dropped any extras and printed the full session table anyway."""
+    with patch("metasphere.cli.session.list_sessions") as m:
+        rc = cli.main(argv)
+    assert rc == 2
+    m.assert_not_called()
+    _, err = capsys.readouterr()
+    assert "session list" in err
+    assert extra in err
+
+
+@pytest.mark.parametrize("extra", ["--bogus", "trailing-positional"])
+def test_info_rejects_trailing_arg_after_agent(capsys, extra):
+    """``session info @x --bogus`` previously dropped ``--bogus`` and
+    proceeded with the lookup; the wake-side fix in 27dccc4 added the
+    same shape of guard for ``agent wake``."""
+    with patch("metasphere.cli.session.session_info") as m:
+        rc = cli.main(["info", "@foo", extra])
+    assert rc == 2
+    m.assert_not_called()
+    _, err = capsys.readouterr()
+    assert "session info" in err
+    assert extra in err

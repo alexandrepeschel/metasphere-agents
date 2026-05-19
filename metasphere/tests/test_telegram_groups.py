@@ -219,3 +219,18 @@ def test_cli_setup_non_interactive(tmp_paths, monkeypatch):
         rc = cli.main(["setup", "--forum-id", "-100222"])
     assert rc == 0
     assert g.get_forum_id(tmp_paths) == "-100222"
+
+
+@pytest.mark.parametrize("argv,extra", [
+    (["list", "--bogus"], "--bogus"),
+    (["list", "extra"], "extra"),
+])
+def test_cli_groups_list_rejects_unknown_args(tmp_paths, capsys, argv, extra):
+    """``telegram groups list`` takes no arguments; pre-hardening
+    silently dropped extras and printed the topic table anyway."""
+    from metasphere.cli import telegram_groups as cli
+    rc = cli.main(argv)
+    _, err = capsys.readouterr()
+    assert rc == 2
+    assert "telegram groups list" in err
+    assert extra in err

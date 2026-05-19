@@ -108,6 +108,14 @@ def _cmd_init(rest: list[str], paths) -> int:
 
 
 def _cmd_list(rest: list[str], paths) -> int:
+    if rest:
+        head = rest[0]
+        kind = "flag" if head.startswith("-") else "argument"
+        sys.stderr.write(
+            f"metasphere project list: unexpected {kind}: {head}\n"
+            f"Usage: metasphere project list (takes no arguments)\n"
+        )
+        return 2
     from metasphere.project import list_projects
     rows = list_projects(paths=paths)
     if not rows:

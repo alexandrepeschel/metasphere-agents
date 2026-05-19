@@ -72,6 +72,14 @@ def main(argv: list[str] | None = None) -> int:
             return 0
 
         if cmd in ("list", "ls"):
+            if rest:
+                head = rest[0]
+                kind = "flag" if head.startswith("-") else "argument"
+                sys.stderr.write(
+                    f"metasphere telegram groups list: unexpected {kind}: {head}\n"
+                    f"Usage: metasphere telegram groups list (takes no arguments)\n"
+                )
+                return 2
             for t in list_topics(paths=paths):
                 print(f"{t.id}\t{t.name}")
             return 0

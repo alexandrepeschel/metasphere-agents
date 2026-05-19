@@ -67,7 +67,9 @@ def main(argv: list[str] | None = None) -> int:
             a = rest[i]
             if a in ("--errors", "-e"):
                 errors_only = True
-            elif a in ("--limit", "-n") and i + 1 < len(rest):
+                i += 1
+                continue
+            if a in ("--limit", "-n") and i + 1 < len(rest):
                 try:
                     limit = int(rest[i + 1])
                 except ValueError:
@@ -77,8 +79,15 @@ def main(argv: list[str] | None = None) -> int:
                         file=sys.stderr,
                     )
                     return 2
-                i += 1
-            i += 1
+                i += 2
+                continue
+            kind = "flag" if a.startswith("-") else "argument"
+            print(
+                f"trace list: unexpected {kind}: {a}\n"
+                f"Usage: trace list [--errors] [--limit N]",
+                file=sys.stderr,
+            )
+            return 2
         for t in list_traces(limit=limit, errors_only=errors_only, paths=paths):
             _print_trace_row(t)
         return 0

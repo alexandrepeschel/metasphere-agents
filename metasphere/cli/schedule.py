@@ -156,7 +156,18 @@ def main(argv: list[str] | None = None) -> int:
     rest = argv[1:]
 
     if cmd in ("", "list", "ls"):
-        project_arg = rest[0] if rest and not rest[0].startswith("-") else None
+        project_arg = None
+        extras = list(rest)
+        if extras and not extras[0].startswith("-"):
+            project_arg = extras.pop(0)
+        if extras:
+            head = extras[0]
+            kind = "flag" if head.startswith("-") else "argument"
+            sys.stderr.write(
+                f"metasphere schedule list: unexpected {kind}: {head}\n"
+                f"Usage: metasphere schedule list [project-name]\n"
+            )
+            return 2
         return _cmd_list(project_filter=project_arg)
     if cmd in ("run", "check"):
         return _cmd_run()

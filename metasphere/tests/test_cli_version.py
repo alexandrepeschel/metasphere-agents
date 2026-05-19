@@ -5,6 +5,8 @@ from __future__ import annotations
 from pathlib import Path
 from unittest import mock
 
+import pytest
+
 from metasphere.cli import version as V
 
 
@@ -31,6 +33,21 @@ def test_version_registered_in_dispatcher():
     from metasphere.cli.main import REGISTRY
     assert "version" in REGISTRY
     assert REGISTRY["version"] == "metasphere.cli.version:main"
+
+
+@pytest.mark.parametrize("argv,extra", [
+    (["--bogus"], "--bogus"),
+    (["extra"], "extra"),
+])
+def test_version_rejects_unknown_args(capsys, argv, extra):
+    """``version`` takes no arguments; the pre-hardening path silently
+    dropped extras and printed version+commit anyway."""
+    rc = V.main(argv)
+    out, err = capsys.readouterr()
+    assert rc == 2
+    assert out == ""
+    assert "metasphere version:" in err
+    assert extra in err
 
 
 def test_resolve_reads_pyproject_version_first():
