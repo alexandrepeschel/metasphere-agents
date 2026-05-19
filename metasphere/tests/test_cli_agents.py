@@ -150,6 +150,51 @@ def test_spawn_main_rejects_flag_shaped_agent_name(
     assert not (tmp_paths.agents / "--bogus").exists()
 
 
+@pytest.mark.parametrize(
+    "argv,subcmd,extra",
+    [
+        (["list", "--bogus"], "list", "--bogus"),
+        (["list", "worldwire", "--bogus"], "list", "--bogus"),
+        (["list", "--filter=foo"], "list", "--filter=foo"),
+        (["status", "--bogus"], "status", "--bogus"),
+        (["status", "trailing"], "status", "trailing"),
+        (["specs", "--bogus"], "specs", "--bogus"),
+        (["specs", "extra"], "specs", "extra"),
+    ],
+)
+def test_read_side_rejects_unknown_args(
+    tmp_paths: Paths, capsys, argv, subcmd, extra,
+):
+    """Read-only ``agent {list,status,specs}`` previously silently
+    dropped unknown trailing args and returned rc=0 with the full
+    output. A typo like ``agent list --filter=foo`` would print the
+    unfiltered tree as if the filter applied. Now rejected as rc=2.
+    """
+    rc = cli_agents.main(argv)
+    _, err = capsys.readouterr()
+    assert rc == 2
+    assert f"metasphere agent {subcmd}" in err
+    assert extra in err
+
+
+def test_wake_rejects_trailing_flag(tmp_paths: Paths, capsys):
+    """``metasphere agent wake @x "task" --bogus`` previously silently
+    dropped the ``--bogus`` and proceeded with the wake. Now rejected
+    before any tmux side effects.
+    """
+    rc = cli_agents.wake_main(["@x", "task", "--bogus"])
+    _, err = capsys.readouterr()
+    assert rc == 2
+    assert "unexpected trailing flag: --bogus" in err
+
+
+def test_wake_rejects_trailing_positional(tmp_paths: Paths, capsys):
+    rc = cli_agents.wake_main(["@x", "task", "extra-positional"])
+    _, err = capsys.readouterr()
+    assert rc == 2
+    assert "unexpected trailing argument: extra-positional" in err
+
+
 def test_agent_seed_rejects_flag_shaped_name(
     tmp_paths: Paths, capsys,
 ):

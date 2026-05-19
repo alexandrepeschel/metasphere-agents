@@ -428,6 +428,18 @@ def wake_main(argv: list[str] | None = None) -> int:
             file=sys.stderr,
         )
         return 1
+    if len(argv) > 2:
+        # Trailing args after agent + optional first_task are almost
+        # always a typo'd flag (`wake @x "task" --bogus`). The pre-
+        # hardening path silently dropped them and reported success.
+        extra = argv[2]
+        kind = "flag" if extra.startswith("-") else "argument"
+        print(
+            f"metasphere agent wake: unexpected trailing {kind}: {extra}\n"
+            f"Usage: metasphere agent wake @agent [\"first task\"]",
+            file=sys.stderr,
+        )
+        return 2
     try:
         rec, delivered = _agents.wake_persistent(agent, first_task=first_task)
     except ValueError as e:
@@ -540,15 +552,41 @@ def _seed(argv: list[str]) -> int:
 # `agents` umbrella entrypoint
 # ---------------------------------------------------------------------------
 
+def _reject_extra(subcmd: str, extras: list[str]) -> int:
+    """Emit a stderr complaint about leftover args and return rc=2.
+
+    Used by read-side leaf commands (``list``, ``status``, ``specs``)
+    that have a fixed argv shape. Without this, an unknown flag like
+    ``metasphere agent list --filter=foo`` silently succeeded with the
+    full unfiltered output — the typo never surfaced.
+    """
+    head = extras[0]
+    if head.startswith("-"):
+        print(f"metasphere agent {subcmd}: unknown flag: {head}", file=sys.stderr)
+    else:
+        print(f"metasphere agent {subcmd}: unexpected argument: {head}", file=sys.stderr)
+    return 2
+
+
 def main(argv: list[str] | None = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
     if argv and argv[0] in ("--help", "-h"):
         sys.stdout.write(USAGE)
         return 0
     if not argv or argv[0] in ("list", "--list"):
-        project_arg = argv[1] if len(argv) > 1 and not argv[1].startswith("-") else None
+        rest = argv[1:] if argv and argv[0] in ("list", "--list") else argv
+        project_arg = None
+        if rest:
+            if rest[0].startswith("-"):
+                return _reject_extra("list", rest)
+            project_arg = rest[0]
+            rest = rest[1:]
+        if rest:
+            return _reject_extra("list", rest)
         return _list(project_filter=project_arg)
     if argv[0] in ("status", "--status"):
+        if argv[1:]:
+            return _reject_extra("status", argv[1:])
         return _status()
     if argv[0] == "spawn":
         return spawn_main(argv[1:])
@@ -557,6 +595,8 @@ def main(argv: list[str] | None = None) -> int:
     if argv[0] == "seed":
         return _seed(argv[1:])
     if argv[0] == "specs":
+        if argv[1:]:
+            return _reject_extra("specs", argv[1:])
         return _list_specs()
     print(f"metasphere agent: unknown subcommand {argv[0]!r}", file=sys.stderr)
     sys.stderr.write(USAGE)
