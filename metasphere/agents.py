@@ -46,9 +46,37 @@ _READY_MARKER = "bypass permissions"
 # and cold-starts instead of injecting into the stale session. The old
 # inject-path silently failed, leaving reap_dormant to kill the session
 # moments later while the scheduler thought the task had been delivered.
-_STALE_SESSION_THRESHOLD_SEC = int(
-    os.environ.get("METASPHERE_STALE_SESSION_THRESHOLD_SEC", "7200")
-)
+_STALE_SESSION_THRESHOLD_DEFAULT = 7200
+
+
+def _resolve_stale_threshold_sec() -> int:
+    raw = os.environ.get("METASPHERE_STALE_SESSION_THRESHOLD_SEC")
+    if raw is None or raw == "":
+        return _STALE_SESSION_THRESHOLD_DEFAULT
+    try:
+        v = int(raw)
+    except ValueError:
+        import sys as _sys
+        print(
+            f"metasphere: METASPHERE_STALE_SESSION_THRESHOLD_SEC expects an "
+            f"integer, got {raw!r}; using default "
+            f"{_STALE_SESSION_THRESHOLD_DEFAULT}",
+            file=_sys.stderr,
+        )
+        return _STALE_SESSION_THRESHOLD_DEFAULT
+    if v < 0:
+        import sys as _sys
+        print(
+            f"metasphere: METASPHERE_STALE_SESSION_THRESHOLD_SEC must be "
+            f"non-negative, got {v}; using default "
+            f"{_STALE_SESSION_THRESHOLD_DEFAULT}",
+            file=_sys.stderr,
+        )
+        return _STALE_SESSION_THRESHOLD_DEFAULT
+    return v
+
+
+_STALE_SESSION_THRESHOLD_SEC = _resolve_stale_threshold_sec()
 
 
 def _utcnow() -> str:

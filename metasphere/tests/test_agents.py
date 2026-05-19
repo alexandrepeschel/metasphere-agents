@@ -39,6 +39,51 @@ def test_list_agents_finds_created_agents(tmp_paths: Paths):
     assert "@beta" in names
 
 
+class TestStaleThresholdEnvParse:
+    """``METASPHERE_STALE_SESSION_THRESHOLD_SEC`` parse hygiene.
+
+    Read at import time, so a bad value must not crash the import or
+    silently corrupt the threshold. Bad inputs warn to stderr and fall
+    back to the default (7200).
+    """
+
+    def test_default_when_unset(self, monkeypatch):
+        monkeypatch.delenv(
+            "METASPHERE_STALE_SESSION_THRESHOLD_SEC", raising=False
+        )
+        assert agents._resolve_stale_threshold_sec() == 7200
+
+    def test_default_when_empty(self, monkeypatch):
+        monkeypatch.setenv("METASPHERE_STALE_SESSION_THRESHOLD_SEC", "")
+        assert agents._resolve_stale_threshold_sec() == 7200
+
+    def test_valid_int_parsed(self, monkeypatch):
+        monkeypatch.setenv("METASPHERE_STALE_SESSION_THRESHOLD_SEC", "300")
+        assert agents._resolve_stale_threshold_sec() == 300
+
+    def test_zero_is_valid(self, monkeypatch):
+        # zero means "every alive session is stale" — possibly useful for
+        # tests; explicit operator intent, not silent corruption.
+        monkeypatch.setenv("METASPHERE_STALE_SESSION_THRESHOLD_SEC", "0")
+        assert agents._resolve_stale_threshold_sec() == 0
+
+    def test_non_int_falls_back_with_warning(self, monkeypatch, capsys):
+        monkeypatch.setenv(
+            "METASPHERE_STALE_SESSION_THRESHOLD_SEC", "two-hours"
+        )
+        assert agents._resolve_stale_threshold_sec() == 7200
+        err = capsys.readouterr().err
+        assert "expects an integer" in err
+        assert "two-hours" in err
+
+    def test_negative_falls_back_with_warning(self, monkeypatch, capsys):
+        monkeypatch.setenv("METASPHERE_STALE_SESSION_THRESHOLD_SEC", "-100")
+        assert agents._resolve_stale_threshold_sec() == 7200
+        err = capsys.readouterr().err
+        assert "non-negative" in err
+        assert "-100" in err
+
+
 def test_is_persistent_requires_mission(tmp_paths: Paths):
     d = tmp_paths.agents / "@persistent"
     d.mkdir(parents=True)
