@@ -177,6 +177,33 @@ def test_read_side_rejects_unknown_args(
     assert extra in err
 
 
+def test_spawn_rejects_flag_shaped_parent(tmp_paths: Paths, capsys, monkeypatch):
+    """``metasphere agent spawn @x / task --bogus`` previously took
+    ``--bogus`` as the parent and rc=0'd. Same trailing-arg leak class
+    27dccc4 closed on the read-side commands; spawn was out of scope
+    in that commit. Reproducer from events log 2026-05-19T08:10:13Z.
+    """
+    monkeypatch.setenv("METASPHERE_SPAWN_NO_EXEC", "1")
+    rc = cli_agents.spawn_main(["@x", "/", "task", "--bogus"])
+    _, err = capsys.readouterr()
+    assert rc == 2
+    assert "parent looks like a CLI flag" in err
+    assert "--bogus" in err
+    assert not (tmp_paths.agents / "@x").exists()
+
+
+def test_spawn_rejects_trailing_after_parent(tmp_paths: Paths, capsys, monkeypatch):
+    """5th+ positional past ``@parent`` was silently dropped pre-fix.
+    Same shape as the wake-trailing guard in 27dccc4.
+    """
+    monkeypatch.setenv("METASPHERE_SPAWN_NO_EXEC", "1")
+    rc = cli_agents.spawn_main(["@x", "/", "task", "@orchestrator", "extra"])
+    _, err = capsys.readouterr()
+    assert rc == 2
+    assert "unexpected trailing argument: extra" in err
+    assert not (tmp_paths.agents / "@x").exists()
+
+
 def test_wake_rejects_trailing_flag(tmp_paths: Paths, capsys):
     """``metasphere agent wake @x "task" --bogus`` previously silently
     dropped the ``--bogus`` and proceeded with the wake. Now rejected

@@ -155,6 +155,29 @@ def spawn_main(argv: list[str] | None = None) -> int:
         print(f"metasphere agent spawn: {e}", file=sys.stderr)
         return 2
 
+    # Spawn was excluded from 27dccc4's trailing-arg sweep. Without
+    # these guards, `metasphere agent spawn @x / "task" --bogus`
+    # silently took ``--bogus`` as the parent and proceeded; any 5th+
+    # positional was dropped with rc=0. Both are typo classes the
+    # operator wants surfaced, not absorbed.
+    if len(argv) >= 4 and argv[3].startswith("-"):
+        print(
+            f"metasphere agent spawn: parent looks like a CLI flag, not an @agent: {argv[3]}\n"
+            f"(contract flags must precede positional args: "
+            f"--authority/--responsibility/--accountability)",
+            file=sys.stderr,
+        )
+        return 2
+    if len(argv) > 4:
+        extra = argv[4]
+        kind = "flag" if extra.startswith("-") else "argument"
+        print(
+            f"metasphere agent spawn: unexpected trailing {kind}: {extra}\n"
+            f"Usage: metasphere agent spawn @agent /scope/ \"task\" [@parent]",
+            file=sys.stderr,
+        )
+        return 2
+
     # Nudge: warn loudly when spawning without a contract so the
     # operator (or orchestrator) feels the friction. Don't hard-block
     # yet — that breaks every legacy spawn site.
