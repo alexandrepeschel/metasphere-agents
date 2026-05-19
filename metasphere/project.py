@@ -149,7 +149,7 @@ class Project:
 
         Walks the projects registry looking for the *longest* entry
         path that is an ancestor of (or equal to) ``cwd``. Longest-
-        match wins so a sub-project at ``<repo>/recurse/`` is picked
+        match wins so a sub-project at ``<repo>/subdir/`` is picked
         over a parent ``<repo>/`` registration. Falls back to
         :func:`project_for_scope` for legacy in-repo ``.metasphere/``
         markers.
