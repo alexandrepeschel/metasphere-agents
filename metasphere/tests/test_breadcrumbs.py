@@ -151,7 +151,7 @@ def test_count_user_messages_skips_agent_wake_notice(tmp_path: Path):
     whenever a new message lands for a live agent. Same inject shape as
     heartbeat, same race risk."""
     p = tmp_path / "t.jsonl"
-    wake_text = "[wake] new task from @scheduler: polymarket:quick-scan — scheduled cron fire..."
+    wake_text = "[wake] new task from @scheduler: cleanup:nightly-sweep — scheduled cron fire..."
     p.write_text(
         "\n".join([
             json.dumps({"type": "user", "message": {"content": "real prompt"}}),
@@ -172,7 +172,7 @@ def test_count_user_messages_keeps_task_dispatch(tmp_path: Path):
     p = tmp_path / "t.jsonl"
     p.write_text(
         "\n".join([
-            json.dumps({"type": "user", "message": {"content": "[task] polymarket:daily-summary — scheduled run."}}),
+            json.dumps({"type": "user", "message": {"content": "[task] cleanup:daily-summary — scheduled run."}}),
             json.dumps({"type": "user", "message": {"content": [{"type": "text", "text": "[task] another scheduled run"}]}}),
         ]) + "\n",
         encoding="utf-8",

@@ -487,10 +487,9 @@ def test_voice_capsule_drops_legacy_byte_and_line_caps(tmp_paths: Paths):
 # mission / status / task / child_reports under
 # ~/.metasphere/projects/<proj>/agents/<id>/, not just the global
 # ~/.metasphere/agents/<id>/. Pre-fix: paths.agent_dir() returned only the
-# global path, so persistent project-scoped agents (e.g. @explorer under
-# metasphere-agents, @polymarket under polymarket-agents) silently received
-# zero persona injection from PR #63 — the renderers fell off the empty
-# global dir without surfacing anything.
+# global path, so persistent project-scoped agents silently received zero
+# persona injection — the renderers fell off the empty global dir without
+# surfacing anything.
 # ---------------------------------------------------------------------------
 
 

@@ -410,10 +410,9 @@ def test_classify_orphan_when_assignee_dir_missing_is_unowned(repo, tmp_paths):
     # Assignee names a now-defunct ephemeral (dir GC'd). With paths
     # passed, classify_task must route through UNOWNED, not STALE —
     # otherwise the task fires STALE escalations forever pinging
-    # nobody. Reproduces the 25 worldwire-orphan tasks at ping 280-294
-    # observed 2026-04-25T10:00Z.
+    # nobody.
     t = _create_task(repo, "orphan ephemeral")
-    t = _tasks.start_task(t.id, "@ww-access-check", repo)
+    t = _tasks.start_task(t.id, "@gc-target", repo)
     t = _set_updated(t, _iso(60), repo)
     # No agent dir at any layout — global or project-scoped.
     assert _con.classify_task(
@@ -424,10 +423,10 @@ def test_classify_orphan_when_assignee_dir_missing_is_unowned(repo, tmp_paths):
 def test_classify_orphan_assignee_old_pinged_out_abandons(repo, tmp_paths):
     # Same orphan path must ride the ABANDONED progression: pinged out
     # AND created > 3 days ago → ABANDONED, archives out of active/.
-    # This is the path that drains the 25 ww-orphan tasks naturally on
-    # the next consolidate cycle instead of leaving them in active/.
+    # Drains aged orphans on the next consolidate cycle instead of
+    # leaving them in active/.
     t = _create_task(repo, "ancient ephemeral orphan")
-    t = _tasks.start_task(t.id, "@ww-cortex-bounce-push", repo)
+    t = _tasks.start_task(t.id, "@gc-target", repo)
     t = _set_updated(t, _iso(60), repo)
     t = _set_created(t, _iso_days(4), repo)
     _tasks.update_task(t.id, repo, ping_count=5)
