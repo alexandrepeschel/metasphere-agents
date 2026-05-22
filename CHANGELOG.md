@@ -4,6 +4,20 @@ All notable changes to Metasphere Agents will be documented here.
 
 ---
 
+## 2026-05-17 to 2026-05-22 — flag-leak closure + posthook fidelity
+
+Short follow-on tranche after the 2026-05-17 backfill. 22 non-bump commits, dominated by the read-side closure of the argv flag-leak audit and a small posthook+breadcrumb correctness pass. Themes:
+
+- **Flag-leak audit closed end-to-end** — the prior tranche's "saturated" call was tranche-shaped, not pattern-shaped. A grep-verified-zero sweep across every read-side CLI leaf surfaced 9 more silent-drop surfaces (`ls`, `status`, `version`, `trace list`, `project list`, `schedule list`, `telegram groups list`, `session info`, etc.) and the closing patch (`27b7791`) rejects unknown trailing args across all of them. Write-side counterparts followed: `tasks new` (a82f47c), `tasks start/update/done/describe/show` (2cc1084), `accounts add/switch` (0573b6f), `session info/attach/stop/restart/send` (4586822), `project member add/remove` (c0d2296), `consolidate run` + `trace prune/list` + `schedule/heartbeat daemon` (d51d613, eabb0f8, be1e73c), `agent list/status/specs/wake` (27dccc4), `agent spawn` (f54cb83). Env-var counterpart in `agents.py` hardens `METASPHERE_STALE_SESSION_THRESHOLD_SEC` against non-int + negative values (76514cd) — a bad env var previously either crashed every CLI invocation or silently corrupted wake-stale logic.
+- **Posthook captures pre-tool text in multi-entry turns** — `extract_last_assistant_text()` returned only the final JSONL assistant entry's text blocks; when a turn had text before tool calls (entry N) followed by tool results and more text (entry N+2), only N+2 reached Telegram and the pre-tool explanation was silently dropped (2d940b3).
+- **Breadcrumb counter skips auto-injections** — heartbeat injections landing during a multi-tool turn inflated the Stop-time user-message count by +1, tripping the fail-closed gate and suppressing Telegram forward (ff26e22). Extended to the two other auto-injectors that share the same shape (restart-wake + agent-wake) for the same mid-turn race (36226b6).
+- **Harness-vs-instance scrub, continuation** — three more passes ahead of the public flip: instance name dropped from `for_cwd` docstring example (bded011), instance identifiers scrubbed from test comments + docs (fb354dd), operator-host identifier stripped from a `KNOWN_ISSUES.md` verification note (9f6b3d6).
+- **README sync** — agent-spawn signature (positional A/R/A contract fields, no more `--scope/--task/--sandbox` flags) + sandbox-level docs brought current with shipped CLI (b13cd9d).
+
+Audit report: `metasphere audit-docs --project metasphere-agents` (run 2026-05-22).
+
+---
+
 ## 2026-04-16 to 2026-05-17 — public-readiness hardening
 
 Month of incremental hardening ahead of the public flip. 357 commits across CLI ergonomics, session lifecycle, consolidation, observability, and the harness-vs-instance scrub. Per-commit history: `git log --since=2026-04-16 --oneline`. Themes:
