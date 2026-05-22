@@ -20,27 +20,35 @@ If you change how spawned ephemerals bootstrap (e.g. add a new
 mandatory step at startup), edit this file. Existing agents won't
 be re-templated, but every new spawn picks it up.
 
-## `agents/<type>/`
+## `agents/<role>/`
 
-Per-agent-type templates installed into a **persistent agent**'s
-home (`~/.metasphere/agents/<id>/`) when `metasphere agent seed
---spec <type>` runs. One subdirectory per spec — current set:
+Per-**role** runtime guidelines copied into a **persistent agent**'s
+home (`~/.metasphere/agents/<id>/AGENTS.md`) when `metasphere agent
+seed --spec <name>` runs. The seeder reads the spec's `role:` field
+(from `specs/<name>/config.md`) and copies the matching
+`templates/agents/<role>/AGENTS.md` — see
+`metasphere/specs.py::_find_agents_md_template`. Current set:
 
-- `critic/` — review-gate agents
-- `designer/` — UX / visual-direction agents
-- `eng/` — implementation agents
-- `explorer/` — autonomous exploration agents
-- `lead/` — team-lead agents
-- `orchestrator/` — orchestrator personae
-- `researcher/` — research / investigation agents
+- `critic/` — review-gate agents (seeded by spec `reviewer`)
+- `designer/` — UX / visual-direction agents (seeded by spec `designer`)
+- `eng/` — implementation agents (seeded by spec `implementer`)
+- `explorer/` — autonomous exploration agents (seeded by spec `monitor`)
+- `lead/` — team-lead agents (seeded by spec `planner`)
+- `researcher/` — research / investigation agents (seeded by spec `researcher`)
+- `orchestrator/` — orchestrator personae (seeded by `install.sh`, no spec)
 
-Each contains the role's `AGENTS.md` (runtime rules / standing
-behavior). Matched on spec at update time by
-`metasphere update`'s drift-check (see `metasphere/update.py`).
+`metasphere update`'s drift-check resolves an agent's role from its
+config sidecar and matches against `templates/agents/<role>/` (see
+`metasphere/update.py::_agent_role`).
 
-Adding a new spec: create `templates/agents/<type>/AGENTS.md`, then
-list the spec in `metasphere/specs.py` so `metasphere agent specs`
-+ `metasphere agent seed --spec <type>` resolve it.
+Adding a new spec:
+1. Create `specs/<name>/` with `SOUL.md`, `MISSION.md`, and
+   `config.md` (frontmatter declares `name:`, `role:`, `sandbox:`).
+   `list_specs()` discovers it via directory scan — no Python edit.
+2. If the spec's `role:` is new, create
+   `templates/agents/<role>/AGENTS.md` for the runtime guidelines.
+   Existing roles reuse the shared `AGENTS.md` so behavior can
+   evolve in one place across all specs sharing the role.
 
 ## `install/`
 
