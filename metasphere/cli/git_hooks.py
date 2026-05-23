@@ -49,10 +49,35 @@ def main(argv: list[str] | None = None) -> int:
     cmd, *rest = args
     paths = resolve()
 
+    def _resolve_path_arg(sub: str, tokens: list[str]) -> Path | int:
+        """Return Path for the optional [path] positional, or an exit code.
+
+        Catches the same class of argv-leak as df6812e (project init):
+        a flag-shaped typo like ``hooks git install --help`` would
+        otherwise land as ``Path('--help')`` and produce a confusing
+        "not a git repository: --help" error instead of usage.
+        """
+        if not tokens:
+            return Path.cwd()
+        head = tokens[0]
+        if head in ("--help", "-h"):
+            sys.stdout.write(USAGE)
+            return 0
+        if head.startswith("-"):
+            print(
+                f"hooks git {sub}: {head!r} looks like a CLI flag, not a path",
+                file=sys.stderr,
+            )
+            return 2
+        return Path(head)
+
     if cmd == "install":
         dry_run = "--dry-run" in rest
         rest = [a for a in rest if a != "--dry-run"]
-        target = Path(rest[0]) if rest else Path.cwd()
+        resolved = _resolve_path_arg("install", rest)
+        if isinstance(resolved, int):
+            return resolved
+        target = resolved
         try:
             written = install_hooks(target, dry_run=dry_run)
         except FileNotFoundError as e:
@@ -63,13 +88,19 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if cmd == "uninstall":
-        target = Path(rest[0]) if rest else Path.cwd()
+        resolved = _resolve_path_arg("uninstall", rest)
+        if isinstance(resolved, int):
+            return resolved
+        target = resolved
         removed = uninstall_hooks(target)
         print(f"removed: {', '.join(removed) if removed else '(none)'}")
         return 0
 
     if cmd == "status":
-        target = Path(rest[0]) if rest else Path.cwd()
+        resolved = _resolve_path_arg("status", rest)
+        if isinstance(resolved, int):
+            return resolved
+        target = resolved
         for hook, state in hooks_status(target).items():
             print(f"  {hook}: {state}")
         return 0
