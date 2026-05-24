@@ -260,6 +260,45 @@ class TestResolveScope:
             == tmp_paths.project_root / "scripts"
         )
 
+    def test_bare_registered_name_via_registry_when_no_canonical_project_json(
+        self, tmp_paths: Paths, tmp_path: Path, monkeypatch
+    ):
+        # Bug: projects registered before PR #10 (or with project.json
+        # still in-repo) lack ``~/.metasphere/projects/<name>/project.json``,
+        # so spawn(scope="worldwire") fell through to project_root/worldwire
+        # and created an empty stub dir. Fallback: consult the registry
+        # index (~/.metasphere/projects.json) when canonical project.json
+        # is absent.
+        sibling = tmp_path / "sources-scraper"
+        sibling.mkdir()
+        registry = tmp_paths.root / "projects.json"
+        registry.write_text(json.dumps([
+            {"name": "worldwire", "path": str(sibling)},
+        ]))
+        monkeypatch.setattr("metasphere.agents._ms_home", lambda: tmp_paths.root)
+        assert agents._resolve_scope("worldwire", tmp_paths.project_root) == sibling
+
+    def test_canonical_project_json_takes_precedence_over_registry(
+        self, tmp_paths: Paths, tmp_path: Path, monkeypatch
+    ):
+        # If both signals exist and disagree, the canonical project.json
+        # wins (it's the source of truth for projects created via
+        # ``metasphere project new``).
+        canonical_target = tmp_path / "canonical"
+        canonical_target.mkdir()
+        registry_target = tmp_path / "registry"
+        registry_target.mkdir()
+        proj_dir = tmp_paths.root / "projects" / "stage"
+        proj_dir.mkdir(parents=True)
+        (proj_dir / "project.json").write_text(
+            json.dumps({"path": str(canonical_target)})
+        )
+        (tmp_paths.root / "projects.json").write_text(json.dumps([
+            {"name": "stage", "path": str(registry_target)},
+        ]))
+        monkeypatch.setattr("metasphere.agents._ms_home", lambda: tmp_paths.root)
+        assert agents._resolve_scope("stage", tmp_paths.project_root) == canonical_target
+
 
 # ---------------------------------------------------------------------------
 # spawn_ephemeral

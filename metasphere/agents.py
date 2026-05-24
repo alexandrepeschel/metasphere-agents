@@ -386,6 +386,23 @@ def _resolve_scope(scope_path: str, project_root: Path) -> Path:
                         return Path(str(registered).rstrip("/"))
                 except (json.JSONDecodeError, OSError):
                     pass
+            # Fallback: canonical project.json is optional for projects
+            # registered before PR #10 or whose project.json still lives
+            # in-repo. Consult ~/.metasphere/projects.json directly so
+            # those projects (e.g. "worldwire") don't fall through and
+            # create a bare-name stub dir under project_root.
+            registry_file = _ms_home() / "projects.json"
+            if registry_file.is_file():
+                try:
+                    entries = json.loads(registry_file.read_text()) or []
+                    for entry in entries:
+                        if entry.get("name") == scope_path:
+                            registered = entry.get("path", "")
+                            if registered:
+                                return Path(str(registered).rstrip("/"))
+                            break
+                except (json.JSONDecodeError, OSError):
+                    pass
         s = project_root / scope_path
     return Path(str(s).rstrip("/"))
 
