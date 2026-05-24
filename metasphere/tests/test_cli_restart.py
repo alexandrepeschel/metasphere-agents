@@ -28,6 +28,38 @@ def test_too_many_args_returns_usage(capsys):
     assert "usage:" in err
 
 
+def test_flag_shaped_positional_rejected(capsys):
+    """A ``--`` or ``-`` prefixed positional (other than --help/-h) is
+    rejected with a clean exit 2 + message naming the flag-shaped
+    token, rather than falling through to ``_normalize_name`` and
+    producing the misleading ``unknown agent: @--foo`` error."""
+    rc = R.main(["--foo"])
+    _, err = capsys.readouterr()
+    assert rc == 2
+    assert "looks like a CLI flag" in err
+    assert "--foo" in err
+
+
+def test_short_flag_shaped_positional_rejected(capsys):
+    rc = R.main(["-x"])
+    _, err = capsys.readouterr()
+    assert rc == 2
+    assert "looks like a CLI flag" in err
+    assert "-x" in err
+
+
+def test_flag_shaped_positional_doesnt_touch_paths(monkeypatch, capsys):
+    """The guard fires before ``resolve()`` / ``list_agents`` are
+    called, so a typo can't materialize disk state."""
+    def boom(*a, **kw):
+        raise AssertionError("resolve() called despite flag-shaped arg")
+    monkeypatch.setattr(R, "resolve", boom)
+    rc = R.main(["--help-typo"])
+    _, err = capsys.readouterr()
+    assert rc == 2
+    assert "--help-typo" in err
+
+
 def test_no_args_restarts_daemons_and_alive_agents(capsys, tmp_path, monkeypatch):
     """Bare ``metasphere restart`` restarts all three systemd daemons
     AND every alive persistent agent's tmux session."""
