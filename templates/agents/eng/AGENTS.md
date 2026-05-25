@@ -279,7 +279,7 @@ ABSTRACT  → Converge: synthesize, update documentation
 LOOP      → Report status, spawn children if needed, continue
 ```
 
-The `metasphere.cli.context` UserPromptSubmit hook injects
+The UserPromptSubmit hook (`metasphere hooks context`) injects
 messages, tasks, voice/mission capsules, project context, child
 reports, recent edits, and CAM hits per turn. You don't need to
 manually fetch these.
