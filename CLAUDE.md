@@ -14,9 +14,11 @@ in `~/.metasphere/CLAUDE.md` (user manual) and
   `memory/`, `telegram/`, `tests/`. Daemon entries live as
   module-level files (`heartbeat.py`, `schedule.py`) — see
   "Daemon services" below.
-- `scripts/` — bash shims that delegate to Python (`metasphere`
-  command itself, plus a few specialized scripts like
-  `metasphere-reaper`).
+- `scripts/` — last surviving bash entry points. The `metasphere`
+  command is a Python console script (see `pyproject.toml`
+  `[project.scripts]`), not a shim here. Only `metasphere-reaper`
+  (npm-root-g zombie sweeper, run via systemd timer) and its
+  sibling test remain.
 - `templates/` — files copied into a user's `~/.metasphere/` on
   install or at agent-spawn time:
   - `templates/install/` — installed to `~/.metasphere/` once at
@@ -105,13 +107,15 @@ the git history reads as a record of the harness's reasoning.
 
 ## Architecture
 
-- Python package + bash shims (shims delegate to Python; users
-  see `metasphere <subcommand>` as the single entry point).
+- Python package; users see `metasphere <subcommand>` (a console
+  script declared in `pyproject.toml`) as the single entry point.
+  Subcommand dispatch lives in `metasphere/cli/_registry.py`.
 - Gateway daemon (`metasphere/gateway/`) runs as a systemd service,
   handles Telegram polling and tmux session lifecycle.
 - Per-turn hooks installed into `~/.metasphere/.claude/settings.local.json`
-  by `install.sh`: `metasphere.cli.context` (UserPromptSubmit) +
-  `metasphere.posthook` (Stop).
+  by `install.sh`: `metasphere hooks context` (UserPromptSubmit) +
+  `metasphere hooks posthook` (Stop) — both subcommands of the
+  unified CLI, paths rewritten by `metasphere update` on relocate.
 - Lifecycle daemon enforces consolidation, dormancy, reap, and ping
   cadence on tasks and agents.
 

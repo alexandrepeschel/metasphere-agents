@@ -382,10 +382,12 @@ install_scripts() {
 
     # Install the unified Python CLI entry point INTO the venv.
     # The single `metasphere` binary dispatches all subcommands via
-    # metasphere.cli.main. Individual metasphere-* scripts are no
-    # longer symlinked into BIN_DIR (legacy bash kept in scripts/ for
-    # reference). Thin shims for `messages` and `tasks` likewise route
-    # through `metasphere msg` / `metasphere task`.
+    # metasphere.cli.main. Individual metasphere-* console scripts
+    # (declared in pyproject.toml [project.scripts]) are installed
+    # alongside it by pip; only `metasphere` itself is symlinked
+    # into BIN_DIR below. The bash era left one script in scripts/
+    # (`metasphere-reaper`, run by systemd timer for npm-root-g
+    # cleanup); everything else routes through the Python CLI.
     #
     # --no-warn-script-location: pip whines that the venv's bin isn't
     # on PATH globally, but we symlink the single `metasphere` entry
