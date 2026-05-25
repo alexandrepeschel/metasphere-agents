@@ -102,8 +102,10 @@ Commands:
                     Wake a dormant persistent agent (re-attaches its
                     tmux session and injects an optional first task).
   seed --spec <spec> @agent-id [--project <name>] [--force]
-                    Materialize the per-type templates from
-                    `templates/agents/<spec>/` into the agent's home.
+                    Materialize the per-role `AGENTS.md` into the
+                    agent's home. The seeder looks up
+                    `templates/agents/<spec.role>/AGENTS.md`
+                    (e.g. spec `reviewer` → role `critic`).
   specs             List available agent type specs.
 
 Each subcommand has its own --help where additional flags exist.

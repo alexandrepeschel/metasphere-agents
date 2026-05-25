@@ -23,9 +23,12 @@ in `~/.metasphere/CLAUDE.md` (user manual) and
   install or at agent-spawn time:
   - `templates/install/` — installed to `~/.metasphere/` once at
     `install.sh` first-run.
-  - `templates/agents/<type>/` — installed to
-    `~/.metasphere/agents/<id>/` when an agent of that type is
-    spawned.
+  - `templates/agents/<role>/` — per-role `AGENTS.md` materialized
+    into `~/.metasphere/agents/<id>/` by `metasphere agent seed
+    --spec <spec>`. The seeder reads `spec.role` and looks up
+    `templates/agents/<role>/AGENTS.md` (e.g. spec `reviewer` →
+    role `critic` → `templates/agents/critic/AGENTS.md`); see
+    `metasphere/specs.py::_find_agents_md_template`.
   - `templates/agent-harness.md` — render template for ephemeral
     one-shot agents (used by `metasphere agent spawn`).
 - `docs/` — public-facing documentation (CLI reference, known
