@@ -4,6 +4,19 @@ All notable changes to Metasphere Agents will be documented here.
 
 ---
 
+## 2026-05-23 to 2026-05-25 — flag-leak follow-on + helper consolidation + scope-registry fallback
+
+Six non-bump commits after the 2026-05-22 "closed end-to-end" call. Two more flag-leak surfaces surfaced (third was caught at the same time), the four-of-a-kind helper got pulled into one place, and a 2026-05-13 scope-resolution fix turned out to miss a class of projects. Themes:
+
+- **Three more flag-shape leaks** — the prior tranche's "closed end-to-end" call held for the read-side audit, but three write-side lookups still silently accepted dash-prefixed positionals: `hooks git install/uninstall/status PATH` (478be54), `restart <agent>` (8d7d794), and `project rename/delete/show/members/move/migrate <name>` (1e7381f). All three now reject flag-shape with rc=2 + a usage hint instead of falling through to a misleading lookup error. Each commit ships its own regression test (test_cli_git_hooks, test_cli_restart, test_cli_project_rename).
+- **Flag-shape rejector consolidated** — after the third lookalike patch, the pattern was stable enough to centralize: `metasphere/cli/_argv.py::reject_flag_shape(value, op, *, command, what, usage)` replaces the inline helper in four surfaces (cli/restart, cli/project, cli/git_hooks, cli/session). Seven surfaces (messages, tasks, consolidate, trace, heartbeat, schedule, agents) keep their local variants — their signatures legitimately differ (3-arg rc=1, task-id sanitizer, combined int+negative validation, separate agent-name validator). The `_argv.py` module docstring records the carve-out so the next contributor doesn't re-converge. Tests in `test_cli_argv.py` cover the shared helper end-to-end; per-surface tests still exist for the call-site wiring. (e8e62ac)
+- **`_resolve_scope` registry fallback** — b549761 (2026-05-13) fixed bare-name scope path-doubling by consulting `~/.metasphere/projects/<name>/project.json`, but projects registered before PR #10 (canonical project-dir move) or with their `project.json` still in-repo had no canonical file. `spawn(scope="worldwire")` from inside metasphere-agents fell through to `<repo>/worldwire/` and seeded an empty `.tasks/.messages` stub on every spawn. Fix: when canonical project.json is missing, consult `~/.metasphere/projects.json` directly and use the registry entry's `path`. Canonical project.json still wins when both signals exist. Live cleanup: removed the `worldwire/` and `ephemeral/` stub dirs the bug had been accumulating. Two new `TestResolveScope` cases cover the registry-fallback path and canonical-precedence-when-both-exist. (50a86a9)
+- **Post-bash-rewrite doc rot in scripts/ + hooks** — three load-bearing repo docs still described the pre-2026-04-14 cutover world: CLAUDE.md's `scripts/` line described "bash shims that delegate to Python" (only `metasphere-reaper` survives); CLAUDE.md's per-turn-hook line named module paths (`metasphere.cli.context`, `metasphere.posthook`) that install.sh hasn't written since cutover (actual paths are `<venv>/bin/metasphere hooks context|posthook`, rewritten by `metasphere update::_sync_hook_paths` on relocate); `.claude/settings.json` `_comment` pointed at the deleted `scripts/metasphere-context` / `scripts/metasphere-posthook`; install.sh:386 comment still said "legacy bash kept in scripts/ for reference". Single-concern doc-only commit — `pytest metasphere/tests/` was green pre-edit (1451 passed, 4 deselected, 213s wall) and the edits don't touch code. (22250e8)
+
+Audit report: `metasphere audit-docs --project metasphere-agents` (run 2026-05-25).
+
+---
+
 ## 2026-05-17 to 2026-05-22 — flag-leak closure + posthook fidelity
 
 Short follow-on tranche after the 2026-05-17 backfill. 22 non-bump commits, dominated by the read-side closure of the argv flag-leak audit and a small posthook+breadcrumb correctness pass. Themes:
