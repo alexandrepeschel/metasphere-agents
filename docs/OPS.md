@@ -235,7 +235,7 @@ actually overloading the host:
 
 ```bash
 METASPHERE_MONITORING_OVERRIDE='zombies=50,tmux=3,pid_pct=99.0' \
-  python -m metasphere.cli.context
+  metasphere hooks context
 ```
 
 The override takes the form `zombies=N,tmux=M,pid_pct=P`. Unparseable
@@ -250,9 +250,9 @@ test pins this invariant.
 
 ## Posthook fail-closed (context-hook breadcrumb)
 
-The `UserPromptSubmit` context hook (`python -m metasphere.cli.context`)
+The `UserPromptSubmit` context hook (`metasphere hooks context`)
 writes a per-turn **success breadcrumb** that the `Stop` posthook
-(`python -m metasphere.posthook`) reads before deciding whether to
+(`metasphere hooks posthook`) reads before deciding whether to
 forward the assistant's final reply to Telegram. If the breadcrumb is
 missing or marked failed, the posthook *fail-closes*: the auto-forward
 is suppressed, an entry is written to a local log, and a single `!info`
