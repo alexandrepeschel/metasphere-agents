@@ -52,25 +52,14 @@ _USAGE_HINTS = {
 
 
 def _reject_flag_shape(value: str, op: str) -> int | None:
-    """Return rc=2 + print error if ``value`` looks like a leaked CLI flag.
+    from metasphere.cli._argv import reject_flag_shape
 
-    Mirrors ``msg._reject_flag_shape`` and ``agents._validate_agent_name``:
-    ``session info --help`` previously fell through to ``no session:
-    --help``, hiding the typo. Flag-shaped agents never resolve to a
-    live tmux session, but the misleading "no session" output is
-    indistinguishable from a real lookup miss.
-    """
-    if value.startswith("-"):
-        hint = _USAGE_HINTS.get(op, "")
-        msg = (
-            f"metasphere session {op}: {value!r} looks like a flag, "
-            f"not an agent id."
-        )
-        if hint:
-            msg = f"{msg} {hint}"
-        sys.stderr.write(msg + "\n")
-        return 2
-    return None
+    return reject_flag_shape(
+        value, op,
+        command="metasphere session",
+        what="agent id",
+        usage=_USAGE_HINTS.get(op),
+    )
 
 
 def main(argv: list[str] | None = None) -> int:

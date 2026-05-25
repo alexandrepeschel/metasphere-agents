@@ -46,27 +46,24 @@ from metasphere.paths import resolve
 
 
 def _reject_flag_shape(value: str, op: str) -> int | None:
-    """Return rc=2 + print error if ``value`` looks like a leaked CLI flag.
+    """Return rc + print error/USAGE if ``value`` looks like a leaked CLI flag.
 
-    Mirrors ``cli.session._reject_flag_shape`` and the argparse path in
-    ``_cmd_init``: ``project show --help`` previously fell through to
-    ``get_project("--help", ...)`` → silent "project not found", and
-    ``project wake --foo`` raised an uncaught FileNotFoundError from
-    ``wake_members``. Flag-shaped names never resolve to a real
-    project, but the misleading lookup error (or traceback) hides the
-    actual typo.
-
-    Returns ``None`` when ``value`` is a normal positional.
+    Differs from the shared ``cli._argv.reject_flag_shape`` in that the
+    project subcommands accept ``--help``/``-h`` inline at the
+    positional slot (the subcommand parser hasn't yet intercepted them
+    when this is called). Returns ``0`` after printing USAGE in that
+    case.
     """
     if not value.startswith("-"):
         return None
     if value in ("--help", "-h"):
         sys.stdout.write(USAGE)
         return 0
-    sys.stderr.write(
-        f"project {op}: {value!r} looks like a CLI flag, not a project name\n"
+    from metasphere.cli._argv import reject_flag_shape
+
+    return reject_flag_shape(
+        value, op, command="project", what="project name"
     )
-    return 2
 
 
 def _parse_member_spec(spec: str) -> dict:

@@ -10,6 +10,7 @@ import sys
 from typing import Iterable
 
 from metasphere import agents as _agents
+from metasphere.cli._argv import reject_flag_shape
 from metasphere.paths import Paths, resolve
 
 _DAEMONS = (
@@ -236,18 +237,14 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     # Reject a flag-shaped positional before it lands as ``@--foo`` in
-    # the unknown-agent path, which produces the misleading "unknown
-    # agent: @--foo" + near-match suggestions and hides the typo. Same
-    # class of argv-leak as 478be54 (hooks git) and df6812e (project
-    # init): the CLI is the right boundary to catch this before it
-    # reaches ``_normalize_name``.
-    if args and args[0].startswith("-"):
-        print(
-            f"metasphere restart: {args[0]!r} looks like a CLI flag, "
-            f"not an agent name",
-            file=sys.stderr,
+    # the unknown-agent path — otherwise the misleading "unknown
+    # agent: @--foo" + near-match suggestions hide the typo.
+    if args:
+        rc = reject_flag_shape(
+            args[0], "restart", command="metasphere", what="agent name"
         )
-        return 2
+        if rc is not None:
+            return rc
 
     paths = resolve()
     if not args:

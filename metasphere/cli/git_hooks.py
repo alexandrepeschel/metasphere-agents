@@ -52,23 +52,23 @@ def main(argv: list[str] | None = None) -> int:
     def _resolve_path_arg(sub: str, tokens: list[str]) -> Path | int:
         """Return Path for the optional [path] positional, or an exit code.
 
-        Catches the same class of argv-leak as df6812e (project init):
-        a flag-shaped typo like ``hooks git install --help`` would
-        otherwise land as ``Path('--help')`` and produce a confusing
-        "not a git repository: --help" error instead of usage.
+        Accepts ``--help``/``-h`` inline (subcommand parser doesn't get
+        a chance otherwise). Other flag-shaped tokens get rejected via
+        the shared ``cli._argv.reject_flag_shape``.
         """
+        from metasphere.cli._argv import reject_flag_shape
+
         if not tokens:
             return Path.cwd()
         head = tokens[0]
         if head in ("--help", "-h"):
             sys.stdout.write(USAGE)
             return 0
-        if head.startswith("-"):
-            print(
-                f"hooks git {sub}: {head!r} looks like a CLI flag, not a path",
-                file=sys.stderr,
-            )
-            return 2
+        rc = reject_flag_shape(
+            head, sub, command="hooks git", what="path"
+        )
+        if rc is not None:
+            return rc
         return Path(head)
 
     if cmd == "install":
