@@ -123,3 +123,97 @@ def test_cli_init_help_flag_does_not_register(tmp_paths: Paths):
     assert exc.value.code == 0
     after = registry.read_text() if registry.is_file() else ""
     assert before == after
+
+
+# ----- flag-shape rejection on lookup-by-name subcommands -----
+# Same class of argv-leak as df6812e (init), 478be54 (hooks-git), and
+# 8d7d794 (restart): ``project <sub> --foo`` falls through to a name
+# lookup that either silently returns "not found" or, in wake's case,
+# raises an uncaught FileNotFoundError.
+
+
+def test_cli_wake_flag_shape_does_not_raise(tmp_paths: Paths, capsys):
+    """``project wake --foo`` previously raised an uncaught
+    FileNotFoundError from ``wake_members``. Guard catches it before
+    the project lookup.
+    """
+    rc = _cli_proj._cmd_wake(["--foo"], tmp_paths)
+    _, err = capsys.readouterr()
+    assert rc == 2
+    assert "looks like a CLI flag" in err
+
+
+def test_cli_show_flag_shape_rejected(tmp_paths: Paths, capsys):
+    rc = _cli_proj._cmd_show(["--bar"], tmp_paths)
+    _, err = capsys.readouterr()
+    assert rc == 2
+    assert "project show" in err
+    assert "'--bar'" in err
+
+
+def test_cli_rename_flag_shape_rejected_on_either_arg(
+    tmp_paths: Paths, capsys,
+):
+    _setup_project(tmp_paths, "src-proj")
+    # leading flag
+    rc = _cli_proj._cmd_rename(["--foo", "ok"], tmp_paths)
+    _, err = capsys.readouterr()
+    assert rc == 2
+    assert "looks like a CLI flag" in err
+    # trailing flag (e.g., typo in the new name)
+    rc = _cli_proj._cmd_rename(["src-proj", "--new"], tmp_paths)
+    _, err = capsys.readouterr()
+    assert rc == 2
+    assert "looks like a CLI flag" in err
+
+
+def test_cli_chat_flag_shape_rejected(tmp_paths: Paths, capsys):
+    rc = _cli_proj._cmd_chat(["--foo", "hi"], tmp_paths)
+    _, err = capsys.readouterr()
+    assert rc == 2
+    assert "looks like a CLI flag" in err
+
+
+def test_cli_wake_help_prints_usage(tmp_paths: Paths, capsys):
+    rc = _cli_proj._cmd_wake(["--help"], tmp_paths)
+    out, _ = capsys.readouterr()
+    assert rc == 0
+    assert "project" in out and "wake" in out
+
+
+def test_cli_show_help_prints_usage(tmp_paths: Paths, capsys):
+    rc = _cli_proj._cmd_show(["-h"], tmp_paths)
+    out, _ = capsys.readouterr()
+    assert rc == 0
+    assert "Usage:" in out
+
+
+def test_cli_changelog_flag_shape_rejected(tmp_paths: Paths, capsys):
+    rc = _cli_proj._cmd_changelog(["--foo"], tmp_paths)
+    _, err = capsys.readouterr()
+    assert rc == 2
+    assert "looks like a CLI flag" in err
+
+
+def test_cli_learnings_flag_shape_rejected(tmp_paths: Paths, capsys):
+    rc = _cli_proj._cmd_learnings(["--foo"], tmp_paths)
+    _, err = capsys.readouterr()
+    assert rc == 2
+    assert "looks like a CLI flag" in err
+
+
+def test_cli_for_flag_shape_rejected(tmp_paths: Paths, capsys):
+    """``project for --foo`` would silently treat ``--foo`` as a path
+    and return 0 with no output. Guard surfaces it as a typo.
+    """
+    rc = _cli_proj._cmd_for(["--foo"], tmp_paths)
+    _, err = capsys.readouterr()
+    assert rc == 2
+    assert "looks like a CLI flag" in err
+
+
+def test_cli_member_list_flag_shape_rejected(tmp_paths: Paths, capsys):
+    rc = _cli_proj._cmd_member(["list", "--foo"], tmp_paths)
+    _, err = capsys.readouterr()
+    assert rc == 2
+    assert "looks like a CLI flag" in err

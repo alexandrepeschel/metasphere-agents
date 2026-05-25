@@ -45,6 +45,30 @@ from pathlib import Path
 from metasphere.paths import resolve
 
 
+def _reject_flag_shape(value: str, op: str) -> int | None:
+    """Return rc=2 + print error if ``value`` looks like a leaked CLI flag.
+
+    Mirrors ``cli.session._reject_flag_shape`` and the argparse path in
+    ``_cmd_init``: ``project show --help`` previously fell through to
+    ``get_project("--help", ...)`` → silent "project not found", and
+    ``project wake --foo`` raised an uncaught FileNotFoundError from
+    ``wake_members``. Flag-shaped names never resolve to a real
+    project, but the misleading lookup error (or traceback) hides the
+    actual typo.
+
+    Returns ``None`` when ``value`` is a normal positional.
+    """
+    if not value.startswith("-"):
+        return None
+    if value in ("--help", "-h"):
+        sys.stdout.write(USAGE)
+        return 0
+    sys.stderr.write(
+        f"project {op}: {value!r} looks like a CLI flag, not a project name\n"
+    )
+    return 2
+
+
 def _parse_member_spec(spec: str) -> dict:
     """Parse ``@agent:role[:persistent]`` into a dict."""
     if not spec.startswith("@"):
@@ -151,6 +175,10 @@ def _cmd_list(rest: list[str], paths) -> int:
 
 def _cmd_show(rest: list[str], paths) -> int:
     from metasphere.project import get_project, project_for_scope
+    if rest:
+        rc = _reject_flag_shape(rest[0], "show")
+        if rc is not None:
+            return rc
     name = rest[0] if rest else None
     proj = get_project(name, paths=paths) if name else project_for_scope(Path.cwd(), paths=paths)
     if proj is None:
@@ -213,6 +241,10 @@ def _cmd_member(rest: list[str], paths) -> int:
         print(f"Removed {ns.agent} from {proj.name}")
         return 0
     if verb in ("list", "ls"):
+        if args:
+            rc = _reject_flag_shape(args[0], "member list")
+            if rc is not None:
+                return rc
         name = args[0] if args else None
         from metasphere.project import project_for_scope
         if name is None:
@@ -231,6 +263,10 @@ def _cmd_member(rest: list[str], paths) -> int:
 
 def _cmd_wake(rest: list[str], paths) -> int:
     from metasphere.project import wake_members, project_for_scope
+    if rest:
+        rc = _reject_flag_shape(rest[0], "wake")
+        if rc is not None:
+            return rc
     name = rest[0] if rest else None
     if name is None:
         proj = project_for_scope(Path.cwd(), paths=paths)
@@ -249,6 +285,10 @@ def _cmd_wake(rest: list[str], paths) -> int:
 
 def _cmd_for(rest: list[str], paths) -> int:
     from metasphere.project import project_for_scope
+    if rest:
+        rc = _reject_flag_shape(rest[0], "for")
+        if rc is not None:
+            return rc
     target = Path(rest[0]) if rest else Path.cwd()
     proj = project_for_scope(target, paths=paths)
     if proj is None:
@@ -259,6 +299,10 @@ def _cmd_for(rest: list[str], paths) -> int:
 
 def _cmd_chat(rest: list[str], paths) -> int:
     from metasphere.project import get_project
+    if rest:
+        rc = _reject_flag_shape(rest[0], "chat")
+        if rc is not None:
+            return rc
     if len(rest) < 2:
         print("usage: project chat <name> 'message'", file=sys.stderr)
         return 2
@@ -313,6 +357,10 @@ def _cmd_topic(rest: list[str], paths) -> int:
 
 def _cmd_changelog(rest: list[str], paths) -> int:
     from metasphere.project import project_changelog
+    if rest:
+        rc = _reject_flag_shape(rest[0], "changelog")
+        if rc is not None:
+            return rc
     try:
         f = project_changelog(rest[0] if rest else None, paths=paths)
     except FileNotFoundError as e:
@@ -324,6 +372,10 @@ def _cmd_changelog(rest: list[str], paths) -> int:
 
 def _cmd_learnings(rest: list[str], paths) -> int:
     from metasphere.project import project_learnings
+    if rest:
+        rc = _reject_flag_shape(rest[0], "learnings")
+        if rc is not None:
+            return rc
     try:
         f = project_learnings(rest[0] if rest else None, paths=paths)
     except FileNotFoundError as e:
@@ -336,6 +388,14 @@ def _cmd_learnings(rest: list[str], paths) -> int:
 def _cmd_rename(rest: list[str], paths) -> int:
     from metasphere.project import rename_project, get_project
 
+    if rest:
+        rc = _reject_flag_shape(rest[0], "rename")
+        if rc is not None:
+            return rc
+        if len(rest) > 1:
+            rc = _reject_flag_shape(rest[1], "rename")
+            if rc is not None:
+                return rc
     if len(rest) < 2:
         print("Usage: metasphere project rename <old-name> <new-name>",
               file=sys.stderr)
