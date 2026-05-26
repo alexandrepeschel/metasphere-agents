@@ -26,12 +26,31 @@ Takes no other arguments.
 
 
 def _repo_root() -> Path:
-    # metasphere/cli/docs.py -> repo root is two parents up.
+    # metasphere/cli/docs.py -> repo root is two parents up. Always
+    # the installed-package location (the source checkout that
+    # ``pip install -e .`` is editable-linked to).
     return Path(__file__).resolve().parents[2]
 
 
+def _cwd_repo_root(start: Path | None = None) -> Path | None:
+    # Walk upward from ``start`` (default: cwd) looking for a
+    # metasphere-agents checkout — i.e. a directory carrying both
+    # ``pyproject.toml`` and ``metasphere/__init__.py``. This lets
+    # ``metasphere docs`` (and any other generator that defaults
+    # under the repo) write to the *invoking* worktree instead of
+    # the editable-installed main checkout, which is what an
+    # operator running the command from a worktree intends.
+    cur = (start or Path.cwd()).resolve()
+    for candidate in (cur, *cur.parents):
+        if (candidate / "pyproject.toml").is_file() and (
+            candidate / "metasphere" / "__init__.py"
+        ).is_file():
+            return candidate
+    return None
+
+
 def _default_output() -> Path:
-    return _repo_root() / "docs" / "CLI.md"
+    return (_cwd_repo_root() or _repo_root()) / "docs" / "CLI.md"
 
 
 def main(argv: list[str] | None = None) -> int:

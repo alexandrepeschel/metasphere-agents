@@ -67,3 +67,39 @@ def test_docs_check_missing_file_is_stale(tmp_path, capsys):
     rc = _docs.main(["--check", "--output", str(out)])
     assert rc == 1
     assert "stale" in capsys.readouterr().err
+
+
+def test_default_output_resolves_from_cwd_when_in_repo(tmp_path, monkeypatch):
+    # Simulate a worktree: a checkout carrying the same fingerprint
+    # as the source repo (``pyproject.toml`` + ``metasphere/__init__.py``)
+    # but at a different path than the editable-installed package.
+    (tmp_path / "pyproject.toml").write_text('[project]\nname = "metasphere"\n')
+    (tmp_path / "metasphere").mkdir()
+    (tmp_path / "metasphere" / "__init__.py").write_text("")
+
+    monkeypatch.chdir(tmp_path)
+    assert _docs._default_output() == tmp_path / "docs" / "CLI.md"
+
+
+def test_default_output_falls_back_to_package_root_outside_repo(tmp_path, monkeypatch):
+    # cwd outside any metasphere-agents checkout: default output
+    # must fall back to the editable-installed package's repo root
+    # so the command keeps working from arbitrary directories.
+    monkeypatch.chdir(tmp_path)
+    expected = _docs._repo_root() / "docs" / "CLI.md"
+    assert _docs._default_output() == expected
+
+
+def test_docs_writes_to_worktree_when_invoked_from_worktree(tmp_path, monkeypatch, capsys):
+    # End-to-end: running ``metasphere docs`` from inside a fake
+    # worktree must materialize ``<worktree>/docs/CLI.md`` rather
+    # than touching the installed package's checkout.
+    (tmp_path / "pyproject.toml").write_text('[project]\nname = "metasphere"\n')
+    (tmp_path / "metasphere").mkdir()
+    (tmp_path / "metasphere" / "__init__.py").write_text("")
+
+    monkeypatch.chdir(tmp_path)
+    rc = _docs.main([])
+    assert rc == 0
+    assert (tmp_path / "docs" / "CLI.md").exists()
+    assert (tmp_path / "docs" / "CLI.md").read_text().strip()
