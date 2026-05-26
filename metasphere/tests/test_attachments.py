@@ -17,6 +17,14 @@ import pytest
 from metasphere.telegram import attachments as _atts
 
 
+@pytest.fixture(autouse=True)
+def _fake_telegram_token(monkeypatch):
+    # ``download_attachment`` resolves ``api._config()`` to build the file
+    # URL even when ``http_get`` is injected — in CI (no token in env, no
+    # config file under HOME) that raises before the fake reaches it.
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "TEST:TOKEN")
+
+
 def _voice_msg(file_id: str = "voice-abc", duration: int = 3) -> dict:
     return {
         "voice": {
