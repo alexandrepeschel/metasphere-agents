@@ -233,6 +233,16 @@ def download_attachment(
             duration=ref.duration,
             error=f"download: {e}",
         )
+    except RuntimeError as e:
+        # ``api._config()`` raises RuntimeError when no bot token is
+        # resolvable. The docstring promises this function never raises,
+        # so degrade to the standard error-as-data return shape.
+        return DownloadedAttachment(
+            kind=ref.kind, path=None,
+            file_size=ref.file_size, mime_type=ref.mime_type,
+            duration=ref.duration,
+            error=f"config: {e}",
+        )
 
 
 def download_attachments(

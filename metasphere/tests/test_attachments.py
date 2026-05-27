@@ -147,6 +147,30 @@ def test_transcription_failure_appends_note(tmp_path, monkeypatch):
     assert "transcription failed: decoder boom" in block
 
 
+def test_download_attachment_returns_error_when_no_token(tmp_path, monkeypatch):
+    """Token resolution failure must not propagate — the function's
+    docstring promises it never raises, so callers can render a context
+    block note even on a misconfigured host."""
+    monkeypatch.delenv("TELEGRAM_BOT_TOKEN", raising=False)
+    monkeypatch.delenv("TELEGRAM_BOT_TOKEN_REWRITE", raising=False)
+    # Point HOME away from any real ~/.metasphere/config so the env-file
+    # branches of ``_load_token`` also miss.
+    monkeypatch.setenv("HOME", str(tmp_path / "no-home"))
+
+    ref = _atts.AttachmentRef(kind="document", file_id="doc-1")
+    result = _atts.download_attachment(
+        ref,
+        tmp_path / "dest",
+        http_get=_fake_http_get,
+        call_fn=_fake_call_factory("documents/file_1.pdf"),
+    )
+
+    assert result.path is None
+    assert result.error is not None
+    assert result.error.startswith("config:")
+    assert "telegram bot token" in result.error.lower()
+
+
 def test_prune_old_voice_files_drops_only_aged_oga(tmp_path):
     root = tmp_path / "attachments"
     (root / "111").mkdir(parents=True)
