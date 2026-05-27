@@ -45,11 +45,11 @@ def _ctx():
 
 
 _USAGE_HINTS = {
-    "send": 'Use: messages send @target !label "message"',
-    "reply": 'Use: messages reply <msg-id> "response"',
-    "done": 'Use: messages done <msg-id> ["note"]',
-    "read": "Use: messages read <msg-id>",
-    "status": "Use: messages status <msg-id>",
+    "send": 'Use: metasphere msg send @target !label "message"',
+    "reply": 'Use: metasphere msg reply <msg-id> "response"',
+    "done": 'Use: metasphere msg done <msg-id> ["note"]',
+    "read": "Use: metasphere msg read <msg-id>",
+    "status": "Use: metasphere msg status <msg-id>",
 }
 
 
@@ -101,7 +101,7 @@ def _print_inbox(show_all: bool) -> int:
 
 def _cmd_send(args: list[str]) -> int:
     if len(args) < 3:
-        print('Usage: messages send @target !label "message"', file=sys.stderr)
+        print('Usage: metasphere msg send @target !label "message"', file=sys.stderr)
         return 1
     target, label, *rest = args
     # Reject flag-shaped target / label up front. ``msg send`` is purely
@@ -131,7 +131,7 @@ def _cmd_send(args: list[str]) -> int:
 
 def _cmd_reply(args: list[str]) -> int:
     if len(args) < 2:
-        print('Usage: messages reply <msg-id> "response"', file=sys.stderr)
+        print('Usage: metasphere msg reply <msg-id> "response"', file=sys.stderr)
         return 1
     orig, *rest = args
     rc = _reject_flag_shape(orig, "msg-id", "reply")
@@ -150,7 +150,7 @@ def _cmd_reply(args: list[str]) -> int:
 
 def _cmd_done(args: list[str]) -> int:
     if not args:
-        print('Usage: messages done <msg-id> ["note"]', file=sys.stderr)
+        print('Usage: metasphere msg done <msg-id> ["note"]', file=sys.stderr)
         return 1
     orig, *rest = args
     rc = _reject_flag_shape(orig, "msg-id", "done")
@@ -172,7 +172,7 @@ def _cmd_done(args: list[str]) -> int:
 
 def _cmd_read(args: list[str]) -> int:
     if not args:
-        print("Usage: messages read <msg-id>", file=sys.stderr)
+        print("Usage: metasphere msg read <msg-id>", file=sys.stderr)
         return 1
     rc = _reject_flag_shape(args[0], "msg-id", "read")
     if rc is not None:
