@@ -49,11 +49,6 @@ def _register_project(tmp_paths, name: str) -> Path:
     return proj_dir
 
 
-def _shipped_user_md_template_path() -> Path:
-    return (Path(__file__).resolve().parent.parent.parent
-            / "templates" / "install" / "projects" / "USER.md.template")
-
-
 # ---------- _substitute ----------
 
 def test_substitute_no_space_form():
@@ -106,8 +101,6 @@ def test_substitute_does_not_recurse_on_value():
 
 def test_seed_project_user_md_creates_file_from_template(tmp_paths):
     """Project-level USER.md is seeded from the shipped template."""
-    if not _shipped_user_md_template_path().is_file():
-        pytest.skip("USER.md.template not yet shipped")
     _register_project(tmp_paths, "alpha")
     user_md = _specs._seed_project_user_md("alpha", "build something", tmp_paths)
     assert user_md is not None
@@ -119,8 +112,6 @@ def test_seed_project_user_md_creates_file_from_template(tmp_paths):
 
 def test_seed_project_user_md_idempotent(tmp_paths):
     """Re-seeding does not overwrite an existing project USER.md."""
-    if not _shipped_user_md_template_path().is_file():
-        pytest.skip("USER.md.template not yet shipped")
     _register_project(tmp_paths, "alpha")
     user_md = _specs._seed_project_user_md("alpha", "v1", tmp_paths)
     assert user_md is not None
@@ -134,8 +125,6 @@ def test_seed_project_user_md_idempotent(tmp_paths):
 
 def test_seed_agent_links_user_md_for_project_scoped(tmp_paths):
     """Project-scoped agent gets a symlink USER.md -> project's USER.md."""
-    if not _shipped_user_md_template_path().is_file():
-        pytest.skip("USER.md.template not yet shipped")
     _register_project(tmp_paths, "alpha")
     spec = _seed_test_spec(tmp_paths.project_root / "specs" / "researcher",
                            name="researcher", role="researcher")
@@ -168,8 +157,6 @@ def test_seed_agent_skips_user_md_for_root_scoped(tmp_paths):
 
 def test_seed_agent_two_agents_share_one_project_user_md(tmp_paths):
     """Two agents on the same project share the same USER.md target."""
-    if not _shipped_user_md_template_path().is_file():
-        pytest.skip("USER.md.template not yet shipped")
     _register_project(tmp_paths, "alpha")
     spec = _seed_test_spec(tmp_paths.project_root / "specs" / "researcher",
                            name="researcher", role="researcher")
@@ -205,8 +192,6 @@ def test_seed_agent_user_md_no_template_leaves_unset(tmp_paths, monkeypatch):
 
 def test_seed_agent_preserves_existing_agent_user_md(tmp_paths):
     """Operator-customized agent USER.md is not clobbered by re-seeding."""
-    if not _shipped_user_md_template_path().is_file():
-        pytest.skip("USER.md.template not yet shipped")
     _register_project(tmp_paths, "alpha")
     spec = _seed_test_spec(tmp_paths.project_root / "specs" / "researcher",
                            name="researcher", role="researcher")
