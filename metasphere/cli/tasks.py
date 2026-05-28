@@ -86,11 +86,11 @@ def _agent() -> str:
 
 
 _TASK_ID_USAGE = {
-    "start": "Use: tasks start <task-id>",
-    "update": 'Use: tasks update <task-id> "note"',
-    "done": 'Use: tasks done <task-id> ["summary"]',
-    "describe": 'Use: tasks describe <task-id> "description text"',
-    "show": "Use: tasks show <task-id>",
+    "start": "Use: metasphere task start <task-id>",
+    "update": 'Use: metasphere task update <task-id> "note"',
+    "done": 'Use: metasphere task done <task-id> ["summary"]',
+    "describe": 'Use: metasphere task describe <task-id> "description text"',
+    "show": "Use: metasphere task show <task-id>",
 }
 
 
@@ -98,14 +98,14 @@ def _reject_flag_shape_task_id(value: str, op: str) -> int | None:
     """Return rc=1 + print error if ``value`` looks like a leaked CLI flag.
 
     Mirrors the guard in ``cli/messages.py``: task ids never start with
-    ``-``. ``tasks start --bogus`` previously dropped an uncaught
+    ``-``. ``metasphere task start --bogus`` previously dropped an uncaught
     FileNotFoundError traceback all the way to the user; gate it here
     with a clean rc + usage hint instead.
     """
     if value.startswith("-"):
         hint = _TASK_ID_USAGE.get(op, "")
         msg = (
-            f"Error: task-id {value!r} looks like a flag — `tasks {op}` "
+            f"Error: task-id {value!r} looks like a flag — `metasphere task {op}` "
             "takes positional args only."
         )
         if hint:
@@ -366,7 +366,7 @@ def _cmd_new(args: list[str]) -> int:
     title = " ".join(title_parts)
     if not title:
         print(
-            'Usage: tasks new "title" [!priority] [--project name] [--assign @agent]',
+            'Usage: metasphere task new "title" [!priority] [--project name] [--assign @agent]',
             file=sys.stderr,
         )
         return 1
@@ -414,7 +414,7 @@ def _cmd_new(args: list[str]) -> int:
 
 def _cmd_assign(args: list[str]) -> int:
     if len(args) < 2:
-        print("Usage: tasks assign <task-id> @agent", file=sys.stderr)
+        print("Usage: metasphere task assign <task-id> @agent", file=sys.stderr)
         return 1
     task_id, agent = args[0], args[1]
     _, repo = _ctx()
@@ -428,16 +428,16 @@ def _cmd_assign(args: list[str]) -> int:
 
 
 def _cmd_move(args: list[str]) -> int:
-    # Usage: tasks move <task-id> --project <name>
+    # Usage: metasphere task move <task-id> --project <name>
     if not args or "--project" not in args:
-        print("Usage: tasks move <task-id> --project <name>", file=sys.stderr)
+        print("Usage: metasphere task move <task-id> --project <name>", file=sys.stderr)
         return 1
     task_id = args[0]
     try:
         idx = args.index("--project")
         project = args[idx + 1]
     except (ValueError, IndexError):
-        print("Usage: tasks move <task-id> --project <name>", file=sys.stderr)
+        print("Usage: metasphere task move <task-id> --project <name>", file=sys.stderr)
         return 1
     _, repo = _ctx()
     try:
@@ -451,7 +451,7 @@ def _cmd_move(args: list[str]) -> int:
 
 def _cmd_start(args: list[str]) -> int:
     if not args:
-        print("Usage: tasks start <task-id>", file=sys.stderr)
+        print("Usage: metasphere task start <task-id>", file=sys.stderr)
         return 1
     rc = _reject_flag_shape_task_id(args[0], "start")
     if rc is not None:
@@ -469,7 +469,7 @@ def _cmd_start(args: list[str]) -> int:
 
 def _cmd_update(args: list[str]) -> int:
     if len(args) < 2:
-        print('Usage: tasks update <task-id> "note"', file=sys.stderr)
+        print('Usage: metasphere task update <task-id> "note"', file=sys.stderr)
         return 1
     task_id, *rest = args
     rc = _reject_flag_shape_task_id(task_id, "update")
@@ -489,8 +489,8 @@ def _cmd_update(args: list[str]) -> int:
 
 def _cmd_done(args: list[str]) -> int:
     if not args:
-        print('Usage: tasks done <task-id> ["summary"]', file=sys.stderr)
-        print('       tasks archive <task-id> ["summary"]   (alias)', file=sys.stderr)
+        print('Usage: metasphere task done <task-id> ["summary"]', file=sys.stderr)
+        print('       metasphere task archive <task-id> ["summary"]   (alias)', file=sys.stderr)
         return 1
     task_id, *rest = args
     rc = _reject_flag_shape_task_id(task_id, "done")
@@ -515,7 +515,7 @@ def _cmd_done(args: list[str]) -> int:
 
 def _cmd_describe(args: list[str]) -> int:
     if len(args) < 2:
-        print('Usage: tasks describe <task-id> "description text"', file=sys.stderr)
+        print('Usage: metasphere task describe <task-id> "description text"', file=sys.stderr)
         return 1
     task_id, *rest = args
     rc = _reject_flag_shape_task_id(task_id, "describe")
@@ -534,7 +534,7 @@ def _cmd_describe(args: list[str]) -> int:
 
 def _cmd_show(args: list[str]) -> int:
     if not args:
-        print("Usage: tasks show <task-id>", file=sys.stderr)
+        print("Usage: metasphere task show <task-id>", file=sys.stderr)
         return 1
     rc = _reject_flag_shape_task_id(args[0], "show")
     if rc is not None:

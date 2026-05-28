@@ -483,7 +483,7 @@ def test_cli_task_id_ops_reject_flag_shape(tmp_paths, monkeypatch, capsys, op, a
     err = capsys.readouterr().err
     assert argv[0] in err
     assert "looks like a flag" in err
-    assert f"`tasks {op}`" in err
+    assert f"`metasphere task {op}`" in err
     # State unchanged.
     assert (t._find_task_file(real.id)).read_text() == pre
 
