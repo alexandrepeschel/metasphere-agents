@@ -234,9 +234,17 @@ def _classify_subject(subject: str) -> str:
 def _staleness_flags(records: List[dict]) -> List[str]:
     """Return human-readable flags for commits that likely invalidate
     README / doc content. One flag per affected commit.
+
+    `docs(...)`/`docs:` commits are skipped — they ARE the doc update,
+    so flagging them as "needs doc update" is a self-referential false
+    positive (see 2026-05-28 audit: `docs(changelog): ... canonical-name
+    drift sweep` tripped the `canonical` keyword on the very commit that
+    documented the canonical-name sweep).
     """
     flags: List[str] = []
     for rec in records:
+        if _classify_subject(rec["subject"]) == "docs":
+            continue
         subject_l = rec["subject"].lower()
         files = rec.get("files", []) or []
         by_keyword = [kw for kw in _STALE_KEYWORDS if kw in subject_l]

@@ -187,6 +187,25 @@ def test_staleness_flags_path_match():
     assert "metasphere/cli/" in flags[0]
 
 
+def test_staleness_flags_skips_docs_commits():
+    # docs(...) commits ARE the doc update; flagging them as needing-doc
+    # is the self-referential false positive that surfaced on the
+    # 2026-05-28 audit (`docs(changelog): ... canonical-name drift sweep`
+    # tripped the `canonical` keyword on its own documenting commit).
+    records = [
+        {"sha": "d000000", "subject": "docs(changelog): canonical-name sweep",
+         "files": ["CHANGELOG.md"]},
+        {"sha": "d111111", "subject": "docs: rename command in README",
+         "files": ["README.md"]},
+        {"sha": "f222222", "subject": "feat(cli): new subcommand",
+         "files": ["metasphere/cli/x.py"]},
+    ]
+    flags = A._staleness_flags(records)
+    # Only the feat commit should flag; the two docs commits are exempt.
+    assert len(flags) == 1
+    assert "f222222" in flags[0]
+
+
 def test_run_audit_unknown_project(tmp_paths, capsys):
     rc, path = A._run_audit("nonexistent", paths=tmp_paths, notify=False)
     assert rc == 2
