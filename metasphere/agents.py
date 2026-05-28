@@ -291,7 +291,7 @@ def _render_harness(
             "## Delegation Contract\n\n"
             "You were spawned under an explicit contract. Read it before\n"
             "you begin. If any field is ambiguous, do NOT guess — send\n"
-            "`messages send @.. !query \"clarify: …\"` and wait.\n\n"
+            "`metasphere msg send @.. !query \"clarify: …\"` and wait.\n\n"
             f"### Authority (what you MAY do)\n\n{authority or '(unspecified — ask parent before acting)'}\n\n"
             f"### Responsibility (what you MUST produce)\n\n{responsibility or '(unspecified — ask parent)'}\n\n"
             f"### Accountability (how parent will verify)\n\n{accountability or '(unspecified — ask parent)'}\n\n"
@@ -322,12 +322,12 @@ You are **{agent_id}**, an autonomous agent working in the Metasphere system.
 ---
 
 {contract}You are autonomous. Work through your task systematically, communicate
-status via `messages send @.. !info`, ask for help if blocked, and
+status via `metasphere msg send @.. !info`, ask for help if blocked, and
 complete your objective.
 
 ## Keep the lifecycle system alive
 
-At every checkpoint, call `tasks update <id> "progress note"` to bump
+At every checkpoint, call `metasphere task update <id> "progress note"` to bump
 `updated_at` — this tells the lifecycle consolidator you are still
 alive on this task. Even "still working on X" counts. If you go silent
 for more than 15 minutes, the consolidation cycle will ping you with a
@@ -338,7 +338,7 @@ stay out of that loop.
 When done:
 
     echo "complete: summary" > ~/.metasphere/agents/{agent_id}/status
-    messages send @.. !done "Completed: <summary>\\n\\nAttestation: <concrete evidence>"
+    metasphere msg send @.. !done "Completed: <summary>\\n\\nAttestation: <concrete evidence>"
 """
 
 

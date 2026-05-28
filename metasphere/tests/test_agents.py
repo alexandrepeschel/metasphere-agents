@@ -381,6 +381,36 @@ def test_spawn_ephemeral_legacy_no_contract_still_works(tmp_paths: Paths, monkey
     assert not (agent_dir / "accountability").exists()
 
 
+def test_spawn_ephemeral_harness_uses_canonical_cli_not_legacy_shims(
+    tmp_paths: Paths, monkeypatch
+):
+    # The harness template tells the spawned agent how to talk back to
+    # its parent and how to bump task heartbeat. After the bash-shim
+    # deprecation those invocations must name the canonical CLI
+    # (`metasphere msg send` / `metasphere task update`) — otherwise
+    # every ephemeral spawn warns about a deprecated entry point on
+    # each communication. Sibling rot to fa8243b (cli/messages.py
+    # USAGE_HINTS).
+    monkeypatch.setenv("METASPHERE_SPAWN_NO_EXEC", "1")
+    agents.spawn_ephemeral(
+        "@canon",
+        "/",
+        "task",
+        parent="@orchestrator",
+        paths=tmp_paths,
+        authority="auth",
+        responsibility="resp",
+        accountability="acct",
+    )
+    harness = (tmp_paths.agents / "@canon" / "harness.md").read_text()
+    # Canonical surface present
+    assert "metasphere msg send @.." in harness
+    assert "metasphere task update <id>" in harness
+    # Legacy shim surface absent
+    assert "messages send @.." not in harness
+    assert "tasks update <id>" not in harness
+
+
 def test_spawn_ephemeral_normalizes_unprefixed_name(tmp_paths: Paths, monkeypatch):
     monkeypatch.setenv("METASPHERE_SPAWN_NO_EXEC", "1")
     rec = agents.spawn_ephemeral("noprefix", "/", "task", paths=tmp_paths)

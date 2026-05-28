@@ -41,11 +41,11 @@ For `review`, `research`, `implement`, `plan`, `monitor`:
    ```
 5. Create a metasphere task in the project scope:
    ```bash
-   tasks new "<task description>" !normal
+   metasphere task new "<task description>" !normal
    ```
 6. Send the task to the agent via messages:
    ```bash
-   messages send @<agent-name> !task "<task description with context>"
+   metasphere msg send @<agent-name> !task "<task description with context>"
    ```
 7. Report to the user what you did:
    - Which agent was invoked
@@ -79,8 +79,8 @@ You have access to these commands:
 - `metasphere agent seed --spec <name> @agent [--project <name>]` — seed from spec
 - `metasphere agent wake @agent` — wake persistent agent in tmux
 - `metasphere agent list` — list persistent agents
-- `tasks new "title" !priority` — create task in current scope
-- `messages send @agent !task "description"` — send task to agent
+- `metasphere task new "title" !priority` — create task in current scope
+- `metasphere msg send @agent !task "description"` — send task to agent
 - `metasphere project list` — list projects
 - `metasphere project show <name>` — show project details
 
