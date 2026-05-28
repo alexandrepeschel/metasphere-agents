@@ -4,6 +4,20 @@ All notable changes to Metasphere Agents will be documented here.
 
 ---
 
+## 2026-05-28 — canonical-name drift sweep across CLI surfaces + one audit-docs date-pick fix
+
+Five non-bump commits in a single day, all narrow. Four close out the last surfaces still naming the legacy bare `messages` / `tasks` console-scripts after the unified-CLI cutover; the fifth fixes a silent over-report in the audit-docs newest-date extractor that was making every audit re-list the prior tranche's commits.
+
+- **`cli/messages` validation hints** — `_USAGE_HINTS` and four `Usage:` printlines in `metasphere/cli/messages.py` still named the legacy `messages send …` form. The deprecation shim in `cli/_shims.py:42` warns and forwards to `metasphere msg`, so the only effect was that error messages pointed the user at the legacy surface they just got warned away from. Caught while the explorer cron itself hit the surface error (`Use: messages send @target !label "message"`) trying to ping `!info`. `test_cli_messages.py:33-35` already accepted both forms, so no test change needed. (`fa8243b`)
+- **`cli/audit-docs` newest-date extractor picks end-of-range** — the regex looked for the first ISO date on a `##` header and returned that, so `## 2026-05-25 to 2026-05-27 — title` was scanned as starting at 2026-05-25. The 2026-05-28 audit was consequently reporting 25 commits since 2026-05-25, of which 18 were already covered by the closure stanza Julian shipped on 2026-05-27. End-date pick makes the same audit report 7 commits since 2026-05-27 — the actual delta. Regression in `test_changelog_newest_date_range_returns_end`. (`72108db`)
+- **harness/team canonical names in ephemeral scaffolding** — the `templates/agent-harness.md` render-template + the `/team` slash command's render block both still gave spawned ephemerals example `messages send` / `tasks new` invocations. New ephemerals would copy-paste those into their first turn and hit the same shim-warn surface. Replaced with `metasphere msg send` / `metasphere task new` throughout. (`226c4d5`)
+- **`cli/tasks` validation hints** — same shape of fix as `fa8243b` but for the task surface: `_USAGE_HINTS` plus the `Usage:` printlines under `cmd_tasks_*` all named the legacy bare `tasks` console-script. Existing tests accepted both forms; no test-side edit. (`2815ebb`)
+- **`schedule.dispatch_command` pre-wake recognizes canonical `msg send`** — the `_extract_messages_send_target` parser that decides whether to cold-start a dormant persistent agent before running a `command`-kind cron only matched the legacy bare-binary `messages send @X …` shape. A future `command`-kind cron using the canonical `metasphere msg send @X !task …` (or the bare `msg` shim) would skip pre-wake and write the inbox notice into a dormant session the gateway never injects into — the exact accumulate-unread silent-failure mode the original `test_dispatch_command_pre_wakes_messages_send_task_target` regression was guarding against. Verified by parsing the live `~/.metasphere/schedule/jobs.json` (45 jobs total, 24 `command`-kind, none currently use `msg send`) that no production cron hits the gap today; fix is forward-looking. Three new test cases (canonical bare, canonical full-path, negative for `metasphere msg read`); 14/14 scoped tests pass. (`2d35880`)
+
+Audit report: `metasphere audit-docs --project metasphere-agents` (run 2026-05-28).
+
+---
+
 ## 2026-05-25 to 2026-05-27 — post-cutover doc-rot closure + small correctness fixes
 
 Seven non-bump commits in the trailing 48h. Three of them close out the "per-turn hook named by command, not module path" sweep that started with 22250e8 in the prior tranche; the rest are small but real correctness fixes (worktree-safe `metasphere docs`, never-raises contract on telegram attachments, dead skip-guard removal). Themes:
