@@ -68,6 +68,18 @@ def test_changelog_newest_date_bare_iso(tmp_path):
     assert A._changelog_newest_date(cl) == "2026-04-15"
 
 
+def test_changelog_newest_date_range_returns_end(tmp_path):
+    #: Range-shaped entries: the audit window starts AFTER the last
+    #: documented day, otherwise the next audit re-reports every
+    #: commit already covered by the trailing range entry.
+    cl = tmp_path / "CHANGELOG.md"
+    cl.write_text(
+        "## 2026-05-25 to 2026-05-27 — closure tranche\n\n"
+        "## 2026-05-17 to 2026-05-22 — earlier tranche\n"
+    )
+    assert A._changelog_newest_date(cl) == "2026-05-27"
+
+
 def test_changelog_newest_date_missing(tmp_path):
     assert A._changelog_newest_date(tmp_path / "nope.md") is None
 

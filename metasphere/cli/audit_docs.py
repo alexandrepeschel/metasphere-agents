@@ -82,10 +82,16 @@ REPORTS_ROOT = Path.home() / ".metasphere" / "audits"
 
 def _changelog_newest_date(changelog: Path) -> Optional[str]:
     """Extract the newest ISO date from a CHANGELOG.md. Looks for lines
-    starting with ``## `` that contain either a bracketed ISO timestamp
-    (``## [2026-04-15T...]``) or a bare ISO date (``## 2026-04-15``).
-    Returns ``YYYY-MM-DD`` (oldest-sufficient since git ``--since`` is
-    day-granular) or ``None`` if no date found.
+    starting with ``## `` in one of three shapes:
+
+    * bracketed ISO timestamp (``## [2026-04-15T...]``)
+    * bare ISO date (``## 2026-04-15 — foo``)
+    * date range (``## 2026-05-25 to 2026-05-27 — foo``) — returns
+      the END of the range; the audit window starts AFTER the last
+      documented day, so the next audit doesn't re-report commits
+      already covered by the trailing range entry.
+
+    Returns ``YYYY-MM-DD`` or ``None`` if no date found.
     """
     if not changelog.is_file():
         return None
@@ -93,12 +99,16 @@ def _changelog_newest_date(changelog: Path) -> Optional[str]:
         text = changelog.read_text(encoding="utf-8", errors="replace")
     except OSError:
         return None
-    #: Accept both ``## [2026-04-15T...]`` and ``## 2026-04-15 — foo``.
-    date_re = re.compile(r"^##\s+\[?(\d{4}-\d{2}-\d{2})")
+    #: Accept ``## [2026-04-15T...]``, ``## 2026-04-15 — foo``, and
+    #: ``## 2026-05-25 to 2026-05-27 — foo``. When the optional
+    #: ``to <date>`` suffix is present, prefer that end-date.
+    date_re = re.compile(
+        r"^##\s+\[?(\d{4}-\d{2}-\d{2})(?:[^\n]*?\s+to\s+(\d{4}-\d{2}-\d{2}))?"
+    )
     for line in text.splitlines():
         m = date_re.match(line)
         if m:
-            return m.group(1)
+            return m.group(2) or m.group(1)
     return None
 
 
