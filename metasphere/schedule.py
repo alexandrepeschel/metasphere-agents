@@ -282,13 +282,20 @@ def _wake_target(
 
 
 def _extract_messages_send_target(payload: str) -> str | None:
-    """Parse ``payload`` as a ``messages send @X !label ...`` command and
-    return ``@X`` if it matches, else None.
+    """Parse ``payload`` as a message-send command and return ``@X`` if it
+    matches, else None.
 
-    Matches any path whose basename is ``messages`` (the legacy CLI form
-    that some older scheduled jobs may still reference) — bare or
-    full-path. New jobs use ``metasphere msg send @X !label …`` which
-    is dispatched separately and not parsed here.
+    Recognizes three argv shapes so a ``command``-kind cron entry triggers
+    pre-wake regardless of which surface the job-author used:
+
+    * ``messages send @X !label …`` — legacy bare console-script.
+    * ``msg send @X !label …``      — canonical bare console-script
+      (deprecated shim, but still on disk for a release or two).
+    * ``metasphere msg send @X …``  — canonical unified-CLI form,
+      bare or full-path. This is what `metasphere schedule add` now
+      writes by default; without recognizing it, a scheduled job
+      targeting a dormant persistent agent would silently fail to
+      pre-wake and the inbox notice would never reach a live REPL.
     """
     import shlex
 
@@ -299,14 +306,23 @@ def _extract_messages_send_target(payload: str) -> str | None:
     if len(argv) < 4:
         return None
     for i in range(len(argv) - 3):
-        if Path(argv[i]).name != "messages":
+        base = Path(argv[i]).name
+        # `metasphere msg send @X …`
+        if (
+            base == "metasphere"
+            and i + 4 <= len(argv)
+            and argv[i + 1] == "msg"
+            and argv[i + 2] == "send"
+        ):
+            tgt = argv[i + 3]
+            return tgt if tgt.startswith("@") else None
+        # `messages send @X …` or `msg send @X …`
+        if base not in ("messages", "msg"):
             continue
         if argv[i + 1] != "send":
             continue
         tgt = argv[i + 2]
-        if tgt.startswith("@"):
-            return tgt
-        return None
+        return tgt if tgt.startswith("@") else None
     return None
 
 

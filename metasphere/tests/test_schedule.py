@@ -301,6 +301,37 @@ def test_extract_messages_send_target_malformed_payload():
     assert _sched._extract_messages_send_target('messages send @x "oops') is None
 
 
+def test_extract_messages_send_target_canonical_msg_bare():
+    # Canonical bare `msg` console-script (shim form).
+    assert (
+        _sched._extract_messages_send_target('msg send @acme !task "x"')
+        == "@acme"
+    )
+
+
+def test_extract_messages_send_target_canonical_metasphere_msg():
+    # Canonical unified-CLI form, bare and full-path.
+    assert (
+        _sched._extract_messages_send_target(
+            'metasphere msg send @acme !task "run pipeline"'
+        )
+        == "@acme"
+    )
+    assert (
+        _sched._extract_messages_send_target(
+            '/home/openclaw/.metasphere/bin/metasphere msg send '
+            '@research-brand !task "scan"'
+        )
+        == "@research-brand"
+    )
+
+
+def test_extract_messages_send_target_metasphere_non_send():
+    # `metasphere msg read` etc. must not match.
+    assert _sched._extract_messages_send_target("metasphere msg read") is None
+    assert _sched._extract_messages_send_target("metasphere msg send !task hi") is None
+
+
 def test_dispatch_command_pre_wakes_messages_send_task_target(tmp_paths):
     """The main regression fix: scheduled `messages send @acme !task`
     commands must cold-start the agent's tmux+REPL before sending, so
