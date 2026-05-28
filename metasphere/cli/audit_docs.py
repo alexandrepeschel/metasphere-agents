@@ -112,6 +112,46 @@ def _changelog_newest_date(changelog: Path) -> Optional[str]:
     return None
 
 
+def _changelog_documented_shas(changelog: Path) -> set[str]:
+    """Return the set of 7-char SHA prefixes already cited in the
+    newest CHANGELOG entry's body.
+
+    Same-day audits trip an awkward boundary: the date floor is UTC
+    midnight (kept liberal so an entry written early in the day still
+    captures later commits — see ``_normalize_since``), so commits
+    landed and documented in the same day get re-reported by the next
+    audit. Resolution is to read the SHAs the newest entry already
+    cites — every entry uses the ``(`abc1234`)`` convention — and
+    filter those out of the audit's commit list. Date-floor stays as
+    the coarse window; SHA-filter is the fine cutter.
+
+    Body = lines between the FIRST ``## `` heading and the next
+    ``## `` heading or ``---`` boundary. Returns an empty set if no
+    CHANGELOG or no SHA references found.
+    """
+    if not changelog.is_file():
+        return set()
+    try:
+        text = changelog.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return set()
+    in_entry = False
+    body: list[str] = []
+    for line in text.splitlines():
+        if line.startswith("## "):
+            if in_entry:
+                break  # second heading = end of newest entry
+            in_entry = True
+            continue
+        if not in_entry:
+            continue
+        if line.strip() == "---":
+            break
+        body.append(line)
+    sha_re = re.compile(r"`([0-9a-f]{7,40})`")
+    return {m.lower()[:7] for m in sha_re.findall("\n".join(body))}
+
+
 _DATE_ONLY_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 
@@ -332,16 +372,20 @@ def _run_audit(project_name: str, *, paths: Paths,
               file=sys.stderr)
         return 2, Path()
 
+    changelog = repo / "CHANGELOG.md"
     if since_override:
         since = since_override
+        documented: set[str] = set()
     else:
-        changelog = repo / "CHANGELOG.md"
         since = _changelog_newest_date(changelog)
         if since is None:
             # No CHANGELOG or no datable entries — audit the last 7 days.
             since = (_dt.date.today() - _dt.timedelta(days=7)).isoformat()
+        documented = _changelog_documented_shas(changelog)
 
     records = _git_log_since(repo, since)
+    if documented:
+        records = [r for r in records if r["sha"][:7].lower() not in documented]
     stale = _staleness_flags(records)
     report = _render_report(project_name, since, records, stale)
 

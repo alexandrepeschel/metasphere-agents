@@ -84,6 +84,69 @@ def test_changelog_newest_date_missing(tmp_path):
     assert A._changelog_newest_date(tmp_path / "nope.md") is None
 
 
+def test_changelog_documented_shas_extracts_newest_entry_only(tmp_path):
+    cl = tmp_path / "CHANGELOG.md"
+    cl.write_text(
+        "# Changelog\n\n---\n\n"
+        "## 2026-05-28 — newest entry\n\n"
+        "- `abc1234` fix(x): one\n"
+        "- bullet without sha\n"
+        "- two SHAs `def5678` and `9abcdef` on one line\n\n"
+        "---\n\n"
+        "## 2026-05-25 to 2026-05-27 — older entry\n\n"
+        "- `0000000` should NOT be returned (older entry)\n"
+    )
+    shas = A._changelog_documented_shas(cl)
+    assert shas == {"abc1234", "def5678", "9abcdef"}
+
+
+def test_changelog_documented_shas_missing_or_empty(tmp_path):
+    assert A._changelog_documented_shas(tmp_path / "nope.md") == set()
+    empty = tmp_path / "CHANGELOG.md"
+    empty.write_text("# Changelog\n")
+    assert A._changelog_documented_shas(empty) == set()
+
+
+def test_run_audit_filters_documented_shas(tmp_path, tmp_paths):
+    """Commits whose SHA is already cited in the newest CHANGELOG entry
+    must not appear in the next audit. Closes the same-day re-report
+    loop that the UTC-midnight floor in `_normalize_since` leaves
+    open.
+    """
+    repo = _make_repo(tmp_path / "proj-filter")
+    # Add one CLI-touching commit, take its SHA.
+    (repo / "cli.py").write_text("x = 1\n")
+    _git(repo, "add", "cli.py")
+    _git(repo, "commit", "-q", "-m", "feat(cli): add new subcommand")
+    sha_documented = subprocess.run(
+        ["git", "-C", str(repo), "rev-parse", "HEAD"],
+        check=True, capture_output=True, text=True,
+    ).stdout.strip()[:7]
+    # Add one more CLI-touching commit that is NOT yet documented.
+    (repo / "cli.py").write_text("x = 2\n")
+    _git(repo, "add", "cli.py")
+    _git(repo, "commit", "-q", "-m", "feat(cli): tweak the new subcommand")
+
+    # CHANGELOG dated today, cites only the first commit's SHA.
+    today = __import__("datetime").date.today().isoformat()
+    (repo / "CHANGELOG.md").write_text(
+        f"## {today} — today's entry\n\n"
+        f"- `{sha_documented}` feat(cli): add new subcommand\n"
+    )
+    _register(tmp_paths, "proj-filter", repo)
+
+    rc, path = A._run_audit(
+        "proj-filter", paths=tmp_paths,
+        output_dir=tmp_path / "audits", notify=False,
+    )
+    report = path.read_text()
+    # The undocumented commit must surface…
+    assert "tweak the new subcommand" in report
+    # …and the documented one must NOT.
+    assert "add new subcommand" not in report
+    assert rc == 1  # staleness flag still raised on the surviving commit
+
+
 def test_git_log_since_parses_subject_and_files(tmp_path):
     repo = _make_repo(tmp_path / "repo")
     (repo / "src.py").write_text("x = 1\n")
