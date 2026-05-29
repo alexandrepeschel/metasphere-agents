@@ -242,6 +242,26 @@ def _canonical_inbox_dirs(paths_obj: Paths | None = None) -> list[Path]:
     return out
 
 
+def _canonical_messages_dirs(paths_obj: Paths | None = None) -> list[Path]:
+    """Every canonical ``.messages/`` dir — one per registered project
+    plus the global bucket.
+
+    Used by :func:`_find_message_anywhere` to walk archive/outbox in
+    addition to the live inbox set.
+    """
+    paths_obj = paths_obj or resolve()
+    out: list[Path] = []
+    if paths_obj.projects.is_dir():
+        for entry in sorted(paths_obj.projects.iterdir()):
+            msgs = entry / ".messages"
+            if msgs.is_dir():
+                out.append(msgs)
+    global_msgs = paths_obj.root / "messages"
+    if global_msgs.is_dir():
+        out.append(global_msgs)
+    return out
+
+
 def _canonical_messages_dir(scope: Path, paths_obj: Paths) -> Path:
     """Resolve an arbitrary scope to its canonical ``.messages/`` dir.
 
@@ -554,9 +574,13 @@ def _find_inbox_msg(
     msg_id: str, project_root: Path, paths: Paths | None = None
 ) -> Path | None:
     # Fast path: write-through index in ~/.metasphere/state/msg_index.json.
+    # The index is inbox-only (callers below operate on live inbox state);
+    # archive-located entries are filtered out so write-side surfaces
+    # (``reply_to_message``, ``mark_done``) never try to mutate archived
+    # messages.
     if paths is not None:
         hit = _index_lookup(msg_id, paths)
-        if hit is not None:
+        if hit is not None and hit.parent.name == "inbox":
             return hit
     # Slow path: walk the canonical per-project inboxes. The
     # ``project_root`` argument is retained for signature compat but
@@ -568,6 +592,62 @@ def _find_inbox_msg(
             if paths is not None:
                 _index_add(msg_id, cand, paths)
             return cand
+    return None
+
+
+def _find_message_anywhere(
+    msg_id: str, paths: Paths | None = None,
+) -> Path | None:
+    """Locate a message by id anywhere on disk — inbox, archive, or
+    outbox.
+
+    Used by read-only surfaces (``metasphere msg read``) so a message
+    remains discoverable across its full lifecycle: live in inbox →
+    moved to archive by ``archive_message`` → or surviving only as a
+    sender-side outbox copy when delivery failed. Write-side surfaces
+    keep using :func:`_find_inbox_msg` to avoid mutating archived state.
+
+    Search order: inbox first (most reads are of live messages), then
+    archive (recently-completed reads), then outbox (sender-side
+    queries + degenerate cases where the inbox copy never landed). The
+    index is consulted as a fast-path for every layer — when the
+    indexed path is stale (file moved out from under it) the walk
+    re-discovers and self-heals the index entry.
+    """
+    paths = paths or resolve()
+
+    # Fast path: index. Trust the cached path if it still exists.
+    hit = _index_lookup(msg_id, paths)
+    if hit is not None:
+        return hit
+
+    # Slow path: walk inbox, archive, outbox per canonical messages dir.
+    for inbox in _canonical_inbox_dirs(paths):
+        cand = inbox / f"{msg_id}.msg"
+        if cand.exists():
+            _index_add(msg_id, cand, paths)
+            return cand
+
+    for messages_dir in _canonical_messages_dirs(paths):
+        archive_root = messages_dir / "archive"
+        if archive_root.is_dir():
+            # Newest day first so recently-archived messages resolve
+            # quickly. Day dirs are YYYY-MM-DD so lexicographic sort
+            # matches chronological.
+            for day_dir in sorted(archive_root.iterdir(), reverse=True):
+                cand = day_dir / f"{msg_id}.msg"
+                if cand.exists():
+                    _index_add(msg_id, cand, paths)
+                    return cand
+
+    for messages_dir in _canonical_messages_dirs(paths):
+        outbox = messages_dir / "outbox"
+        if outbox.is_dir():
+            cand = outbox / f"{msg_id}.msg"
+            if cand.exists():
+                _index_add(msg_id, cand, paths)
+                return cand
+
     return None
 
 
@@ -671,6 +751,14 @@ def archive_message(msg_path: Path) -> Path:
             os.remove(lock)
     except OSError:
         pass
+    # Refresh the discovery index so ``msg read`` resolves the new
+    # location without falling back to the slow archive walk. The index
+    # is best-effort — failures don't break archival.
+    try:
+        msg_id = msg_path.stem
+        _index_add(msg_id, dest, resolve())
+    except Exception:
+        pass
     return dest
 
 
@@ -682,14 +770,25 @@ def mark_read(msg_id: str, paths: Paths | None = None) -> Message:
     curious peek-read would pollute the STALE window that
     :mod:`metasphere.consolidate` computes from that timestamp. Mirrors
     the guard in :func:`read_message` view-mode (see issue #109).
+
+    Discovery walks inbox → archive → outbox via
+    :func:`_find_message_anywhere` so messages remain readable across
+    their full lifecycle. The ``read_at`` mutation only fires for live
+    inbox copies — archived or outbox-only copies are returned
+    read-only because:
+    archived messages have already completed their lifecycle, and
+    outbox copies are sender-owned (mutating them on a recipient read
+    would invert ownership).
     """
     paths = paths or resolve()
-    p = _find_inbox_msg(msg_id, paths.project_root, paths=paths)
+    p = _find_message_anywhere(msg_id, paths=paths)
     if p is None:
         raise FileNotFoundError(f"message {msg_id} not found")
     with file_lock(_lock_path(p)):
         msg = read_message(p)
-        if msg.status == STATUS_UNREAD and msg.label not in SACRED_LABELS:
+        if (msg.status == STATUS_UNREAD
+                and msg.label not in SACRED_LABELS
+                and p.parent.name == "inbox"):
             msg.status = STATUS_READ
             msg.read_at = _utcnow()
             write_frontmatter_file(p, msg.to_frontmatter())
