@@ -147,6 +147,67 @@ def test_run_audit_filters_documented_shas(tmp_path, tmp_paths):
     assert rc == 1  # staleness flag still raised on the surviving commit
 
 
+def test_is_auto_version_bump_recognizes_bot_shape():
+    # Canonical shape from .github/workflows/bump-minor.yml — unicode
+    # arrow + trailing [skip ci].
+    assert A._is_auto_version_bump(
+        "chore: bump version 0.195.0 → 0.196.0 [skip ci]"
+    )
+    # Manual ascii-arrow bump without [skip ci] (e.g. a contributor
+    # pinning a version in the same merge as a feature commit).
+    assert A._is_auto_version_bump(
+        "chore: bump version 1.2.3 -> 1.2.4"
+    )
+    # Non-bump chores must NOT match — the filter has to leave real
+    # housekeeping work in the audit.
+    assert not A._is_auto_version_bump("chore(tests): drop stale skip-guards")
+    assert not A._is_auto_version_bump("chore: cleanup")
+    # Feat / fix / docs never match even if they mention "version".
+    assert not A._is_auto_version_bump("feat: emit version on --version")
+    assert not A._is_auto_version_bump("docs: bump version in README example")
+
+
+def test_run_audit_filters_auto_version_bumps(tmp_path, tmp_paths):
+    """Auto-version-bump commits from the bump-minor workflow recycle
+    every cycle as Chores noise — they have to be filtered before
+    classification, otherwise Julian strips them by hand on every
+    CHANGELOG promotion (and the audit report dilutes 7-of-10 with
+    bumps, as seen on the 2026-05-29 audit).
+    """
+    repo = _make_repo(tmp_path / "proj-bumpfilter")
+    (repo / "CHANGELOG.md").write_text("## 2020-01-01 — ancient\n")
+    # One real feature commit, then two bot bumps interleaved with
+    # one more real fix. After filtering only the two non-bump commits
+    # should appear in the report.
+    (repo / "f.py").write_text("x = 1\n")
+    _git(repo, "add", "f.py")
+    _git(repo, "commit", "-q", "-m", "feat: shipped feature")
+    (repo / "pyproject.toml").write_text("v = 1\n")
+    _git(repo, "add", "pyproject.toml")
+    _git(repo, "commit", "-q", "-m", "chore: bump version 0.1.0 → 0.2.0 [skip ci]")
+    (repo / "f.py").write_text("x = 2\n")
+    _git(repo, "add", "f.py")
+    _git(repo, "commit", "-q", "-m", "fix: shipped fix")
+    (repo / "pyproject.toml").write_text("v = 2\n")
+    _git(repo, "add", "pyproject.toml")
+    _git(repo, "commit", "-q", "-m", "chore: bump version 0.2.0 → 0.3.0 [skip ci]")
+    _register(tmp_paths, "proj-bumpfilter", repo)
+
+    _rc, path = A._run_audit(
+        "proj-bumpfilter", paths=tmp_paths,
+        output_dir=tmp_path / "audits", notify=False,
+    )
+    report = path.read_text()
+    assert "shipped feature" in report
+    assert "shipped fix" in report
+    # Neither bump line should leak into the report.
+    assert "bump version 0.1.0" not in report
+    assert "bump version 0.2.0" not in report
+    # Header reports the post-filter commit count (seed + feat + fix =
+    # 3, since the seed commit also survives — it's not a bump).
+    assert "3 commit(s)" in report
+
+
 def test_git_log_since_parses_subject_and_files(tmp_path):
     repo = _make_repo(tmp_path / "repo")
     (repo / "src.py").write_text("x = 1\n")

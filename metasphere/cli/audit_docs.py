@@ -27,6 +27,10 @@ Options:
                      same-day commits are included) or any string git
                      --since understands.
 
+Auto-generated `chore: bump version X.Y.Z → A.B.C` commits from the
+bump-minor workflow are filtered out before classification — they
+carry no CHANGELOG signal and Julian strips them by hand otherwise.
+
 Subcommand `register-cron`:
   --project <name>          Only register one project (default: all).
   --cron-expr "<expr>"      Cron expression (default: "0 18 * * *").
@@ -78,6 +82,22 @@ _STALE_PATH_PATTERNS = (
 #: Default output dir for audit reports. One file per audit run,
 #: namespaced by project + date.
 REPORTS_ROOT = Path.home() / ".metasphere" / "audits"
+
+#: Auto-generated version-bump commits produced by the bump-minor
+#: GitHub Action carry zero CHANGELOG signal — they get filtered out
+#: of the audit before classification so they don't recycle every
+#: cycle as Chores noise. Tolerates both unicode arrow (the bot's
+#: shape) and ascii ``->`` (a manual bump), and the trailing
+#: ``[skip ci]`` marker is optional.
+_AUTO_VERSION_BUMP_RE = re.compile(
+    r"^chore:\s*bump version\s+\d+\.\d+\.\d+\s*(?:→|->)\s*\d+\.\d+\.\d+"
+    r"(?:\s*\[skip ci\])?\s*$"
+)
+
+
+def _is_auto_version_bump(subject: str) -> bool:
+    """Return True if ``subject`` is an auto-version-bump commit."""
+    return bool(_AUTO_VERSION_BUMP_RE.match(subject.strip()))
 
 
 def _changelog_newest_date(changelog: Path) -> Optional[str]:
@@ -394,6 +414,7 @@ def _run_audit(project_name: str, *, paths: Paths,
     records = _git_log_since(repo, since)
     if documented:
         records = [r for r in records if r["sha"][:7].lower() not in documented]
+    records = [r for r in records if not _is_auto_version_bump(r["subject"])]
     stale = _staleness_flags(records)
     report = _render_report(project_name, since, records, stale)
 

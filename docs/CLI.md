@@ -583,6 +583,10 @@ Options:
                      same-day commits are included) or any string git
                      --since understands.
 
+Auto-generated `chore: bump version X.Y.Z → A.B.C` commits from the
+bump-minor workflow are filtered out before classification — they
+carry no CHANGELOG signal and Julian strips them by hand otherwise.
+
 Subcommand `register-cron`:
   --project <name>          Only register one project (default: all).
   --cron-expr "<expr>"      Cron expression (default: "0 18 * * *").
