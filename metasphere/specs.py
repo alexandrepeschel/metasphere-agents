@@ -61,17 +61,44 @@ class AgentSpec:
 
 
 def _parse_frontmatter(text: str) -> dict:
-    """Extract YAML-style frontmatter from a markdown file (--- delimited)."""
-    result = {}
+    """Extract YAML-style frontmatter from a markdown file (--- delimited).
+
+    Scalar values are returned as ``str``. Inline-list values of the
+    form ``key: [a, b, c]`` are returned as ``list[str]`` with each
+    element stripped of surrounding whitespace and optional matching
+    quotes; empty entries are dropped, so ``[]`` yields ``[]``.
+
+    Dependency-free by design — PyYAML would be the only third-party
+    import in this module. Block-style ``- item`` lists are NOT
+    supported (yagni until a frontmatter field needs them).
+    """
+    result: dict = {}
     lines = text.split("\n")
     if not lines or lines[0].strip() != "---":
         return result
-    for i, line in enumerate(lines[1:], start=1):
+    for line in lines[1:]:
         if line.strip() == "---":
             break
-        if ":" in line:
-            key, val = line.split(":", 1)
-            result[key.strip()] = val.strip()
+        if ":" not in line:
+            continue
+        key, val = line.split(":", 1)
+        key = key.strip()
+        val = val.strip()
+        if val.startswith("[") and val.endswith("]"):
+            inner = val[1:-1].strip()
+            if not inner:
+                result[key] = []
+                continue
+            items: list[str] = []
+            for raw in inner.split(","):
+                item = raw.strip()
+                if len(item) >= 2 and item[0] == item[-1] and item[0] in ("'", '"'):
+                    item = item[1:-1]
+                if item:
+                    items.append(item)
+            result[key] = items
+        else:
+            result[key] = val
     return result
 
 
