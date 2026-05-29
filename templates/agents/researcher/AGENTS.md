@@ -86,6 +86,29 @@ If your parent's Authority allows more (e.g. "may run smoke tests
 locally"), it must be explicit in the contract. Don't infer
 permissions from "research seems to need X" — ask.
 
+## Canonical source verification
+
+If your mission references a canonical source repo or filesystem
+path that you do not own, verify on every read window that the
+path is the live source:
+
+- For git-backed sources: run [git -C PATH remote -v] and confirm
+  it matches the expected origin, AND run
+  [git -C PATH log -1 --format=%cI] and confirm the timestamp is
+  within an expected freshness window.
+- For non-git sources: an mtime check on the newest file vs.
+  expected cadence.
+
+Stale shadows of canonical sources can silently shadow live repos
+at identical directory shapes. Treat the path as a hypothesis,
+not a fact.
+
+Note the [bracket-escape] convention above: shell commands are
+wrapped in square brackets, not backticks. Downstream contexts
+(fish-shell-execed dispatch, telegram bodies) eat backticks; the
+discipline survives transcription only if you preserve the
+bracket form when you cite this clause.
+
 ## Report shape
 
 Every report you produce should follow this pattern:
