@@ -187,13 +187,12 @@ def _render_voice_capsule(paths: Paths, agent: str) -> str:
 _MISSION_BYTE_CAP = 1024
 _MISSION_LINE_CAP = 30
 
-# WHY: per-file 2KB is double mission's cap — LEARNINGS/MEMORY are
-# the on-disk knowledge base and denser than mission. Overall 8KB
-# protects against any single agent's project pool monopolising;
-# the outer ``truncate_section`` (default 2KB) is the final budget
-# enforcer per the spec ("agent-level pool is more reusable").
+# Per-file 2KB cap: LEARNINGS/MEMORY are the on-disk knowledge base
+# and denser than mission. Section-level enforcement is delegated to
+# the outer ``truncate_section`` call in ``build_context`` (default
+# 2KB budget), which is the load-bearing cap — no per-section knob
+# needed here.
 _PROJECT_FILE_BYTE_CAP = 2048
-_PROJECT_SECTION_BYTE_CAP = 8192
 
 
 def _render_mission_capsule(paths: Paths, agent: str) -> str:
@@ -289,10 +288,7 @@ def _render_project_capsule(paths: Paths, agent: str) -> str:
     if not sections:
         return ""
 
-    capsule = "\n\n".join(sections)
-    data = capsule.encode("utf-8")[:_PROJECT_SECTION_BYTE_CAP]
-    capsule = data.decode("utf-8", errors="ignore").rstrip()
-    return capsule + "\n"
+    return "\n\n".join(sections) + "\n"
 
 
 def _render_project_migration_nudge(paths: Paths, agent: str) -> str:
@@ -384,9 +380,10 @@ def _render_project_migration_nudge(paths: Paths, agent: str) -> str:
         return ""
 
     proj_list = ", ".join(matched_tokens)
+    noun = "entry" if total_hits == 1 else "entries"
     body = (
         "## Per-project memory migration\n\n"
-        f"{total_hits} entries in your agent-level LEARNINGS/MEMORY "
+        f"{total_hits} {noun} in your agent-level LEARNINGS/MEMORY "
         f"look project-specific (matches: {proj_list}). "
         "Spawn a migration ephemeral to clean up.\n"
     )

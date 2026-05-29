@@ -93,6 +93,18 @@ def test_matches_in_learnings_emits_nudge(tmp_paths: Paths):
     assert "2 entries" in out
 
 
+def test_single_hit_uses_singular_noun(tmp_paths: Paths):
+    # N=1 must read "1 entry" — not "1 entries".
+    _register_project(tmp_paths, "worldwire")
+    _seed_agent(
+        tmp_paths, "@alpha",
+        learnings="- worldwire VACUUM lessons at 20M chunks.\n",
+    )
+    out = ctx._render_project_migration_nudge(tmp_paths, "@alpha")
+    assert "1 entry" in out
+    assert "1 entries" not in out
+
+
 def test_word_boundary_avoids_spurious_substring(tmp_paths: Paths):
     # Project named "wire" must NOT match "worldwire" or "wireless".
     _register_project(tmp_paths, "wire")
