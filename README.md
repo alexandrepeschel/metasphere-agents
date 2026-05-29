@@ -100,6 +100,8 @@ Every inbound Telegram message goes through **one** handler — `metasphere.tele
 ~/.metasphere/
 ├── projects/<name>/
 │   ├── project.json       # Project metadata (members, goal, telegram topic)
+│   ├── LEARNINGS.md       # Per-project durable insights (auto-injected into agent context)
+│   ├── MEMORY.md          # Per-project curated memos (auto-injected into agent context)
 │   ├── .tasks/active/     # Task frontmatter files
 │   ├── .tasks/archive/    # Dated completion archive
 │   ├── .messages/inbox/   # Per-project inbox
@@ -234,6 +236,7 @@ Agents build up persistent memory across sessions:
 - **Daily logs** — narrative entries about what happened, what was learned, what surprised
 - **LEARNINGS.md** — durable insights that should influence future behavior
 - **Searchable index** — full-text search across all past sessions and memory files
+- **Per-project memory** — agents declaring `project: <name>` or `projects: [<a>, <b>]` in `MISSION.md` frontmatter get `~/.metasphere/projects/<name>/LEARNINGS.md` and `MEMORY.md` auto-injected into their context on every turn. Agents whose agent-level files still contain project-specific entries see a one-time migration nudge.
 
 ```bash
 metasphere memory search "query"   # Search agent memory
