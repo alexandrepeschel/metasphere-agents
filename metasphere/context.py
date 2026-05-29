@@ -186,6 +186,14 @@ def _render_voice_capsule(paths: Paths, agent: str) -> str:
 _MISSION_BYTE_CAP = 1024
 _MISSION_LINE_CAP = 30
 
+# WHY: per-file 2KB is double mission's cap — LEARNINGS/MEMORY are
+# the on-disk knowledge base and denser than mission. Overall 8KB
+# protects against any single agent's project pool monopolising;
+# the outer ``truncate_section`` (default 2KB) is the final budget
+# enforcer per the spec ("agent-level pool is more reusable").
+_PROJECT_FILE_BYTE_CAP = 2048
+_PROJECT_SECTION_BYTE_CAP = 8192
+
 
 def _render_mission_capsule(paths: Paths, agent: str) -> str:
     """Inject the agent's MISSION.md so persistent agents know their
@@ -205,6 +213,85 @@ def _render_mission_capsule(paths: Paths, agent: str) -> str:
     if not body:
         return ""
     return f"## Mission\n\n{body}\n"
+
+
+def _render_project_capsule(paths: Paths, agent: str) -> str:
+    """Inject per-project LEARNINGS+MEMORY for projects declared in
+    the agent's MISSION.md frontmatter.
+
+    Reads ``project: <name>`` (scalar) and ``projects: [a, b]`` (list)
+    from MISSION.md, concatenates each project's
+    ``~/.metasphere/projects/<P>/LEARNINGS.md`` and ``MEMORY.md`` into
+    one section per project (in declared order, dedup'd).
+
+    Returns ``""`` when the agent declares no project, when no project
+    file exists, or when MISSION.md is unreadable.
+    """
+    from .specs import _parse_frontmatter
+
+    agent_dir = paths.find_agent_dir(agent) or paths.agent_dir(agent)
+    mission_file = agent_dir / "MISSION.md"
+    if not mission_file.is_file():
+        return ""
+    try:
+        text = mission_file.read_text(encoding="utf-8")
+    except OSError:
+        return ""
+    fm = _parse_frontmatter(text)
+
+    declared: list[str] = []
+    scalar = fm.get("project")
+    if isinstance(scalar, str) and scalar.strip():
+        declared.append(scalar.strip())
+    elif isinstance(scalar, list):
+        declared.extend(p for p in scalar if isinstance(p, str) and p)
+    plural = fm.get("projects")
+    if isinstance(plural, list):
+        declared.extend(p for p in plural if isinstance(p, str) and p)
+    elif isinstance(plural, str) and plural.strip():
+        declared.append(plural.strip())
+
+    seen: set[str] = set()
+    ordered: list[str] = []
+    for p in declared:
+        if p not in seen:
+            seen.add(p)
+            ordered.append(p)
+    if not ordered:
+        return ""
+
+    def _read_capped(path: Path) -> str:
+        if not path.is_file():
+            return ""
+        try:
+            body = path.read_text(encoding="utf-8").strip()
+        except OSError:
+            return ""
+        if not body:
+            return ""
+        data = body.encode("utf-8")[:_PROJECT_FILE_BYTE_CAP]
+        return data.decode("utf-8", errors="ignore").rstrip()
+
+    sections: list[str] = []
+    for p in ordered:
+        proj_dir = paths.projects / p
+        learnings = _read_capped(proj_dir / "LEARNINGS.md")
+        memory = _read_capped(proj_dir / "MEMORY.md")
+        parts: list[str] = []
+        if learnings:
+            parts.append("### LEARNINGS\n\n" + learnings)
+        if memory:
+            parts.append("### MEMORY\n\n" + memory)
+        if parts:
+            sections.append(f"## Project: {p}\n\n" + "\n\n".join(parts))
+
+    if not sections:
+        return ""
+
+    capsule = "\n\n".join(sections)
+    data = capsule.encode("utf-8")[:_PROJECT_SECTION_BYTE_CAP]
+    capsule = data.decode("utf-8", errors="ignore").rstrip()
+    return capsule + "\n"
 
 
 def _render_child_reports(paths: Paths, agent: str) -> str:
@@ -622,6 +709,8 @@ def build_context(paths: Paths | None = None, *, budget: int = DEFAULT_SECTION_B
     sections.append(truncate_section(voice, budget) if voice else "")
     mission = _render_mission_capsule(paths, agent)
     sections.append(truncate_section(mission, budget) if mission else "")
+    project_capsule = _render_project_capsule(paths, agent)
+    sections.append(truncate_section(project_capsule, budget) if project_capsule else "")
     drift = _render_drift_warning(paths)
     sections.append(truncate_section(drift, budget) if drift else "")
     directives_block = _render_directives(paths)
