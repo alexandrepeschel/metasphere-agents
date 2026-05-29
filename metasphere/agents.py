@@ -41,6 +41,17 @@ _SESSION_PREFIX = "metasphere-"
 _READY_TIMEOUT_S = 15
 _READY_MARKER = "bypass permissions"
 
+# Above this body size, ``wake_persistent`` persists the task to the
+# recipient's inbox and injects only a short pointer banner. The Claude
+# Code TUI's bracketed-paste handler can silently drop multi-KB payloads
+# — the partial body lands in the input box and C-m commits the
+# truncated text. msg-1780061828 (2026-05-29) was a ~3KB T1 dispatch
+# that came up as an empty banner on the eng pane; the bootstrap-
+# pointer workaround used outbox-path indirection to recover. 512B is
+# well under the smallest payload that has reproduced truncation so far
+# and leaves plenty of headroom inside the empirical safe zone.
+_WAKE_BANNER_BODY_THRESHOLD = 512
+
 # If a tmux session is "alive" but has had no activity for longer than
 # this, wake_persistent treats it as a zombie (crashed/hung claude REPL)
 # and cold-starts instead of injecting into the stale session. The old
@@ -693,6 +704,51 @@ def _submit_via_tmux(session: str, body: str) -> bool:
     return _tmux_submit(session, body, escape_prefix=False)
 
 
+def _prepare_wake_banner(
+    target_agent: str,
+    first_task: str,
+    paths: Paths,
+) -> str:
+    """Render the per-wake banner that gets pasted into the recipient's
+    pane.
+
+    Short bodies inline as ``[task] <body>`` (no behavioural change for
+    the common case). Bodies above ``_WAKE_BANNER_BODY_THRESHOLD`` are
+    persisted as a ``!task`` message via :func:`messages.send_message`
+    and the banner is reduced to a pointer the recipient can read at
+    leisure. That bypasses the TUI's bracketed-paste cap entirely (see
+    ``_WAKE_BANNER_BODY_THRESHOLD`` for the repro).
+
+    ``send_message`` is called with ``wake=False`` so this helper does
+    not double-fire the wake — the immediate ``_submit_via_tmux`` of
+    the returned banner is the wake.
+
+    Falls back to the inline form if ``send_message`` raises: losing
+    the wake entirely is strictly worse than risking re-truncation.
+    """
+    if len(first_task.encode("utf-8")) <= _WAKE_BANNER_BODY_THRESHOLD:
+        return f"[task] {first_task}"
+
+    try:
+        from .identity import resolve_agent_id
+        from .messages import send_message
+        sender = resolve_agent_id(paths)
+        msg = send_message(
+            target=target_agent,
+            label="!task",
+            body=first_task,
+            from_agent=sender,
+            paths=paths,
+            wake=False,
+        )
+        return (
+            f"[task] Long body persisted as {msg.id} from {sender}. "
+            f"Read via: metasphere msg read {msg.id}"
+        )
+    except Exception:
+        return f"[task] {first_task}"
+
+
 def wake_persistent(
     agent_name: str,
     first_task: Optional[str] = None,
@@ -776,7 +832,8 @@ def wake_persistent(
         else:
             delivered = True
             if first_task:
-                delivered = _submit_via_tmux(session, f"[task] {first_task}")
+                banner = _prepare_wake_banner(agent_id, first_task, paths)
+                delivered = _submit_via_tmux(session, banner)
             return rec, delivered
 
     # Cold start.
@@ -830,7 +887,8 @@ def wake_persistent(
 
     delivered = True
     if first_task:
-        delivered = _submit_via_tmux(session, f"[task] {first_task}")
+        banner = _prepare_wake_banner(agent_id, first_task, paths)
+        delivered = _submit_via_tmux(session, banner)
 
     return _agent_record_from_dir(agent_dir, project=project), delivered
 
