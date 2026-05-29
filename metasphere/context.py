@@ -215,17 +215,63 @@ def _render_mission_capsule(paths: Paths, agent: str) -> str:
     return f"## Mission\n\n{body}\n"
 
 
+def _infer_project_for_agent(
+    paths: Paths, agent: str, agent_dir: Path
+) -> str | None:
+    """Auto-infer a single project association from the agent's dir
+    layout when MISSION.md frontmatter declares nothing.
+
+    Resolution chain (frontmatter is handled by the caller; this is
+    the fallback ONLY when frontmatter is absent):
+
+    1. Path inference: agent home at
+       ``~/.metasphere/projects/<P>/agents/@<agent>/`` → ``<P>``.
+    2. Name-prefix inference: ``@<project>-<role>`` (first dash
+       split) AND ``~/.metasphere/projects/<project>/`` exists →
+       ``<project>``.
+
+    Returns ``None`` when neither matches. Inference yields at most
+    one project — multi-project agents must declare via
+    ``projects: [a, b]`` frontmatter (explicit beats implicit).
+    """
+    try:
+        if (
+            agent_dir.parent.name == "agents"
+            and agent_dir.parent.parent.parent == paths.projects
+        ):
+            project = agent_dir.parent.parent.name
+            if (paths.projects / project).is_dir():
+                return project
+    except Exception:
+        pass
+
+    name = agent.lstrip("@")
+    if "-" in name:
+        prefix = name.split("-", 1)[0]
+        if prefix and (paths.projects / prefix).is_dir():
+            return prefix
+
+    return None
+
+
 def _render_project_capsule(paths: Paths, agent: str) -> str:
-    """Inject per-project LEARNINGS+MEMORY for projects declared in
-    the agent's MISSION.md frontmatter.
+    """Inject per-project LEARNINGS+MEMORY for projects associated
+    with the agent.
 
-    Reads ``project: <name>`` (scalar) and ``projects: [a, b]`` (list)
-    from MISSION.md, concatenates each project's
-    ``~/.metasphere/projects/<P>/LEARNINGS.md`` and ``MEMORY.md`` into
-    one section per project (in declared order, dedup'd).
+    Sources, in precedence order:
 
-    Returns ``""`` when the agent declares no project, when no project
-    file exists, or when MISSION.md is unreadable.
+    1. ``project: <name>`` (scalar) or ``projects: [a, b]`` (list)
+       in MISSION.md frontmatter — explicit override / escape hatch,
+       and the only path that supports multi-project agents.
+    2. When frontmatter declares nothing, infer a single project via
+       :func:`_infer_project_for_agent` (dir layout, then name
+       prefix). Lets agents whose MISSION.md predates the
+       per-project memory layer pick up their project's
+       LEARNINGS/MEMORY without an annotation pass (Julian
+       directive 2026-05-29 22:32Z — msg-1780093638).
+
+    Returns ``""`` when no source resolves any project, when no
+    project file exists, or when MISSION.md is unreadable.
     """
     from .specs import _parse_frontmatter
 
@@ -257,6 +303,15 @@ def _render_project_capsule(paths: Paths, agent: str) -> str:
         if p not in seen:
             seen.add(p)
             ordered.append(p)
+
+    # Fallback runs only when frontmatter declared nothing. An agent
+    # with explicit ``project: customproject`` keeps that even when
+    # their dir layout or name would infer something different.
+    if not ordered:
+        inferred = _infer_project_for_agent(paths, agent, agent_dir)
+        if inferred:
+            ordered.append(inferred)
+
     if not ordered:
         return ""
 
