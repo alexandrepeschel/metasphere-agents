@@ -31,6 +31,13 @@ Auto-generated `chore: bump version X.Y.Z → A.B.C` commits from the
 bump-minor workflow are filtered out before classification — they
 carry no CHANGELOG signal and Julian strips them by hand otherwise.
 
+Commits whose 7-char SHA prefix is already cited in the newest
+CHANGELOG entry are also filtered out. This catches the same-day
+boundary where commits and their documenting entry land on the
+same UTC date and would otherwise be re-reported by the next
+audit. The date floor stays as the coarse window; the SHA filter
+is the fine cutter.
+
 Subcommand `register-cron`:
   --project <name>          Only register one project (default: all).
   --cron-expr "<expr>"      Cron expression (default: "0 18 * * *").
