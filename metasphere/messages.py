@@ -77,6 +77,16 @@ PINNED_LABELS = frozenset({"!task", "!query"})
 # Backward-compat alias (used in older code / tests).
 SACRED_LABELS = PINNED_LABELS
 
+# Labels that escalate to ``wake_persistent`` when the best-effort
+# tmux inject in ``wake_recipient_if_live`` returns delivered=False
+# (dormant session, deferred typing, unresolvable target). Without
+# the escalation, !task can sit unread for hours when the recipient
+# is dormant — see msg-1780086179 / @writing-lead's 7h-stuck !task.
+# !info, !done, and !reply intentionally stay on the heartbeat
+# cadence: they're async status flow where REPL pickup on the next
+# turn is the correct semantic.
+HIGH_PRIORITY_LABELS = frozenset({"!task", "!urgent", "!query"})
+
 
 def _utcnow() -> str:
     return _dt.datetime.now(_dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -536,11 +546,52 @@ def send_message(
     except Exception:
         pass
 
+    delivered = False
     if wake and from_agent != "@user":
         try:
-            wake_recipient_if_live(target, label, from_agent, body, paths=paths)
+            delivered = wake_recipient_if_live(
+                target, label, from_agent, body, paths=paths,
+            )
         except Exception:
             pass
+
+    # Escalate to session-respawn for high-priority labels when the
+    # best-effort tmux inject above didn't actually land. Without this,
+    # a !task to a dormant recipient sits unread until the next idle
+    # heartbeat tick — see msg-1780086179 (writing-lead's !task stuck
+    # 7h before Julian asked for the drafts). wake_persistent injects
+    # into a live session OR cold-starts a fresh one; B1's truncation-
+    # safe bootstrap-pointer handles long bodies automatically.
+    if (
+        wake
+        and not delivered
+        and label in HIGH_PRIORITY_LABELS
+        and from_agent != "@user"
+        and target != from_agent  # self-send guard
+        and _is_wakeable_agent_target(target, paths)
+    ):
+        try:
+            from . import agents as _agents
+            agent_name = target[1:]  # strip leading @
+            body_preview = ""
+            if body.strip():
+                body_preview = body.strip().splitlines()[0][:80]
+            # msg_id is already 'msg-<unix-ms>-<rand>'; don't double-prefix.
+            first_task = f"New {label} in inbox: {msg_id}."
+            if body_preview:
+                first_task = f"{first_task} {body_preview}"
+            _agents.wake_persistent(agent_name, first_task=first_task, paths=paths)
+        except ValueError:
+            # wake_persistent raises ValueError when target isn't a
+            # registered persistent agent (no MISSION.md). Expected for
+            # ephemerals and stale @<name> references; inbox delivery
+            # already happened above so nothing else to do.
+            pass
+        except Exception as e:
+            logger.warning(
+                "send_message(%s): high-priority wake_persistent raised: %s",
+                target, e,
+            )
 
     # Mirror to project telegram topic (additive). Failures are silent —
     # regular fractal scope routing above is the source of truth.
@@ -798,6 +849,39 @@ def mark_read(msg_id: str, paths: Paths | None = None) -> Message:
 # ---------------------------------------------------------------------------
 # Wake (tmux plumbing in metasphere.tmux)
 # ---------------------------------------------------------------------------
+
+
+def _is_wakeable_agent_target(target: str, paths: Paths) -> bool:
+    """True iff ``target`` is the form ``@<agent_name>`` and resolves to a
+    registered persistent agent (not a project, not a scope-relative
+    pointer, not ``@user``).
+
+    Used by :func:`send_message` to gate the high-priority escalation
+    to :func:`metasphere.agents.wake_persistent`. Cheaper than letting
+    ``wake_persistent`` raise ``ValueError`` for the common project /
+    pointer cases, and lets us preserve the explicit-check preference
+    from the dispatch brief.
+    """
+    if not target.startswith("@"):
+        return False
+    if target in ("@user", "@..", "@."):
+        return False
+    if target.startswith("@/"):
+        return False
+    name = target[1:]
+    if not name:
+        return False
+    # If the name resolves to a registered project, it's not an agent —
+    # projects don't have tmux sessions.
+    try:
+        from . import project as _project
+        if _project.get_project(name, paths=paths) is not None:
+            return False
+    except Exception:
+        # Defensive: any project-registry hiccup falls through to the
+        # wake_persistent ValueError path, which is also caught.
+        pass
+    return True
 
 
 def wake_recipient_if_live(
