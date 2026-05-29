@@ -13,6 +13,7 @@ import collections as _collections
 import datetime as _dt
 import hashlib
 import json
+import re
 import subprocess
 from pathlib import Path
 
@@ -292,6 +293,105 @@ def _render_project_capsule(paths: Paths, agent: str) -> str:
     data = capsule.encode("utf-8")[:_PROJECT_SECTION_BYTE_CAP]
     capsule = data.decode("utf-8", errors="ignore").rstrip()
     return capsule + "\n"
+
+
+def _render_project_migration_nudge(paths: Paths, agent: str) -> str:
+    """Cold-start nudge for agents whose agent-level LEARNINGS/MEMORY
+    contain entries that look project-specific.
+
+    Per the per-project memory spec (Phase 1, section "Periodic check
+    in the hook"): scan the residual agent-level pool for known project
+    tokens; if matches found, surface a one-line nudge to spawn a
+    migration ephemeral. Strictly nudge-only — the spec explicitly says
+    "Don't auto-migrate — that's destructive."
+
+    Project tokens are the registered project names under
+    ``~/.metasphere/projects/`` (one subdir per project). Match
+    semantic: case-insensitive word-boundary regex per token. The
+    word-boundary form avoids spurious substring hits (``worldwire``
+    would otherwise catch ``worldwireless`` and similar near-tokens).
+
+    Sentinel cache at ``<agent_dir>/state/migration_nudge_seen`` stores
+    a fingerprint of the LEARNINGS+MEMORY mtimes the last time we
+    inspected. Subsequent calls suppress the nudge while the
+    fingerprint matches — approximating "cache a flag once a session
+    has been nudged" from the spec, extended to "until either source
+    file is edited." Writing the sentinel on the no-match path too
+    keeps the per-turn cost bounded for agents with nothing to migrate.
+
+    Returns ``""`` when no agent-level files exist, no project tokens
+    match, or the sentinel reports no change since last surfacing.
+    """
+    agent_dir = paths.find_agent_dir(agent) or paths.agent_dir(agent)
+    learnings = agent_dir / "LEARNINGS.md"
+    memory = agent_dir / "MEMORY.md"
+    files = [f for f in (learnings, memory) if f.is_file()]
+    if not files:
+        return ""
+
+    try:
+        current_fp = "|".join(
+            f"{f.name}:{f.stat().st_mtime_ns}" for f in files
+        )
+    except OSError:
+        return ""
+
+    sentinel = agent_dir / "state" / "migration_nudge_seen"
+    if sentinel.is_file():
+        try:
+            stored = sentinel.read_text(encoding="utf-8").strip()
+        except OSError:
+            stored = ""
+        if stored == current_fp:
+            return ""
+
+    projects_dir = paths.projects
+    tokens: list[str] = []
+    if projects_dir.is_dir():
+        try:
+            for entry in sorted(projects_dir.iterdir()):
+                if entry.is_dir() and not entry.name.startswith("."):
+                    tokens.append(entry.name)
+        except OSError:
+            pass
+    if not tokens:
+        return ""
+
+    matched_tokens: list[str] = []
+    total_hits = 0
+    for f in files:
+        try:
+            text = f.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        for token in tokens:
+            pat = re.compile(rf"\b{re.escape(token)}\b", re.IGNORECASE)
+            hits = pat.findall(text)
+            if hits:
+                if token not in matched_tokens:
+                    matched_tokens.append(token)
+                total_hits += len(hits)
+
+    def _persist_sentinel() -> None:
+        try:
+            sentinel.parent.mkdir(parents=True, exist_ok=True)
+            sentinel.write_text(current_fp, encoding="utf-8")
+        except OSError:
+            pass
+
+    if not matched_tokens:
+        _persist_sentinel()
+        return ""
+
+    proj_list = ", ".join(matched_tokens)
+    body = (
+        "## Per-project memory migration\n\n"
+        f"{total_hits} entries in your agent-level LEARNINGS/MEMORY "
+        f"look project-specific (matches: {proj_list}). "
+        "Spawn a migration ephemeral to clean up.\n"
+    )
+    _persist_sentinel()
+    return body
 
 
 def _render_child_reports(paths: Paths, agent: str) -> str:
@@ -711,6 +811,8 @@ def build_context(paths: Paths | None = None, *, budget: int = DEFAULT_SECTION_B
     sections.append(truncate_section(mission, budget) if mission else "")
     project_capsule = _render_project_capsule(paths, agent)
     sections.append(truncate_section(project_capsule, budget) if project_capsule else "")
+    migration_nudge = _render_project_migration_nudge(paths, agent)
+    sections.append(truncate_section(migration_nudge, budget) if migration_nudge else "")
     drift = _render_drift_warning(paths)
     sections.append(truncate_section(drift, budget) if drift else "")
     directives_block = _render_directives(paths)
