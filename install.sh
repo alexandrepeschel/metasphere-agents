@@ -350,6 +350,17 @@ PYEOF
         fi
     fi
 
+    # Seed ~/.metasphere/teams.yaml — the central agent→projects
+    # roster consumed by the project-capsule resolver (B7). No-op
+    # when the file already exists so operator edits are preserved
+    # across re-runs.
+    local teams_config="$METASPHERE_DIR/teams.yaml"
+    if [[ ! -f "$teams_config" && -f "$SCRIPT_DIR/templates/install/teams.yaml" ]]; then
+        cp "$SCRIPT_DIR/templates/install/teams.yaml" "$teams_config"
+        chmod 644 "$teams_config"
+        ok "Seeded ~/.metasphere/teams.yaml from template"
+    fi
+
     ok "Created $METASPHERE_DIR"
 }
 
