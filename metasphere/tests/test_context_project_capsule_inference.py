@@ -84,40 +84,21 @@ def test_path_inference_project_nested_agent(tmp_paths: Paths):
 
 
 # ---------------------------------------------------------------------------
-# Probe 2: root-scope agent, NO frontmatter, name prefix matches a
-# registered project → name inference.
+# Root-scope agent, no frontmatter, no teams.yaml → no capsule.
+# (B4's name-prefix string-match branch was removed in B7;
+# ``@worldwire-eng`` at root scope without a teams.yaml entry no
+# longer auto-resolves.)
 # ---------------------------------------------------------------------------
 
 
-def test_name_prefix_inference_root_scope_agent(tmp_paths: Paths):
-    _seed_root_agent_mission(tmp_paths, "@worldwire-probe2")
-    _seed_project_files(
-        tmp_paths, "worldwire",
-        memory="ricardo owns Louvain inheritance.",
-    )
-
-    out = ctx._render_project_capsule(tmp_paths, "@worldwire-probe2")
-
-    assert "## Project: worldwire" in out
-    assert "ricardo owns Louvain inheritance." in out
-
-
-# ---------------------------------------------------------------------------
-# Probe 3: name prefix doesn't match any project dir → no capsule.
-# ---------------------------------------------------------------------------
-
-
-def test_name_prefix_inference_no_match(tmp_paths: Paths):
+def test_root_scope_no_inference_returns_empty(tmp_paths: Paths):
     _seed_root_agent_mission(tmp_paths, "@no-project-match")
-    # No project dirs exist beyond tmp_paths default.
-
     out = ctx._render_project_capsule(tmp_paths, "@no-project-match")
-
     assert out == ""
 
 
 # ---------------------------------------------------------------------------
-# Probe 4: explicit frontmatter wins over path inference.
+# Explicit frontmatter wins over path inference.
 # ---------------------------------------------------------------------------
 
 
@@ -144,32 +125,7 @@ def test_frontmatter_overrides_path_inference(tmp_paths: Paths):
 
 
 # ---------------------------------------------------------------------------
-# Probe 5: explicit frontmatter wins over name-prefix inference.
-# ---------------------------------------------------------------------------
-
-
-def test_frontmatter_overrides_name_inference(tmp_paths: Paths):
-    _seed_root_agent_mission(
-        tmp_paths, "@worldwire-probe5",
-        frontmatter="project: writing\n",
-    )
-    _seed_project_files(
-        tmp_paths, "worldwire", learnings="inferred-but-should-not-render",
-    )
-    _seed_project_files(
-        tmp_paths, "writing", memory="this-must-render",
-    )
-
-    out = ctx._render_project_capsule(tmp_paths, "@worldwire-probe5")
-
-    assert "## Project: writing" in out
-    assert "this-must-render" in out
-    assert "## Project: worldwire" not in out
-
-
-# ---------------------------------------------------------------------------
-# Probe 6: multi-project frontmatter still works after the fallback
-# is plumbed in (regression check on T1 list-projects path).
+# Multi-project frontmatter (regression on T1 list-projects path).
 # ---------------------------------------------------------------------------
 
 
@@ -189,40 +145,8 @@ def test_multi_project_frontmatter_still_works(tmp_paths: Paths):
 
 
 # ---------------------------------------------------------------------------
-# Probe 7: name-prefix uses FIRST dash split. ``@a-b-c`` with both
-# ``a`` and ``a-b`` registered should resolve to ``a`` per the
-# documented contract — first-dash split is what the helper does.
-# ---------------------------------------------------------------------------
-
-
-def test_name_prefix_first_dash_split(tmp_paths: Paths):
-    _seed_root_agent_mission(tmp_paths, "@a-b-c")
-    _seed_project_files(tmp_paths, "a", learnings="picked-first-segment")
-    _seed_project_files(tmp_paths, "a-b", learnings="should-not-pick")
-
-    out = ctx._render_project_capsule(tmp_paths, "@a-b-c")
-
-    assert "## Project: a" in out
-    assert "picked-first-segment" in out
-    assert "## Project: a-b" not in out
-
-
-# ---------------------------------------------------------------------------
-# Probe 8: name prefix without a matching project dir → no-op.
-# ---------------------------------------------------------------------------
-
-
-def test_inference_skips_when_project_dir_missing(tmp_paths: Paths):
-    _seed_root_agent_mission(tmp_paths, "@ghost-probe")
-    # projects/ghost/ does NOT exist.
-
-    out = ctx._render_project_capsule(tmp_paths, "@ghost-probe")
-
-    assert out == ""
-
-
-# ---------------------------------------------------------------------------
 # Helper-level unit coverage for _infer_project_for_agent.
+# Path-nested branch only (name-prefix removed in B7).
 # ---------------------------------------------------------------------------
 
 
@@ -243,23 +167,12 @@ def test_infer_returns_project_for_nested_agent(tmp_paths: Paths):
     ) == "worldwire"
 
 
-def test_infer_path_dominates_name_prefix(tmp_paths: Paths):
-    # Agent dir layout says "writing"; name prefix says "worldwire".
-    # Path wins.
-    _seed_project_files(tmp_paths, "writing")
-    _seed_project_files(tmp_paths, "worldwire")
-    agent_dir = _seed_project_nested_agent_mission(
-        tmp_paths, "writing", "@worldwire-eng",
-    )
-    assert ctx._infer_project_for_agent(
-        tmp_paths, "@worldwire-eng", agent_dir,
-    ) == "writing"
-
-
-def test_infer_strips_at_prefix(tmp_paths: Paths):
-    # The agent identifier is sometimes passed without the leading @.
+def test_infer_no_name_prefix_resolution(tmp_paths: Paths):
+    """B7 regression: ``@worldwire-probe`` at root scope with project
+    ``worldwire`` registered must NOT resolve via the deleted
+    name-prefix branch."""
     _seed_project_files(tmp_paths, "worldwire")
     agent_dir = _seed_root_agent_mission(tmp_paths, "@worldwire-probe")
     assert ctx._infer_project_for_agent(
-        tmp_paths, "worldwire-probe", agent_dir,
-    ) == "worldwire"
+        tmp_paths, "@worldwire-probe", agent_dir,
+    ) is None

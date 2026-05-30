@@ -1,0 +1,62 @@
+# Metasphere agent-team roster.
+#
+# Maps each persistent agent to the project(s) whose per-project
+# LEARNINGS.md / MEMORY.md should land in their per-turn context
+# capsule. This is the canonical alternative to MISSION.md
+# frontmatter — use this when agent names don't follow the
+# ``<project>-<role>`` convention (e.g. @spot, @orchestrator), or
+# when the agent needs visibility into multiple projects.
+#
+# Resolution precedence in the project capsule:
+#   1. MISSION.md ``project:`` / ``projects:`` frontmatter (explicit
+#      per-agent override; highest priority).
+#   2. This file (centralized team config; default for most agents).
+#   3. Path-nested inference (agent dir at
+#      ``~/.metasphere/projects/<P>/agents/@<id>/`` resolves to ``<P>``).
+#   4. No capsule when none of the above resolve.
+#
+# Schema:
+#   agents:
+#     <agent-name-without-@>:
+#       projects: [<project-name>, ...]
+#
+# Operator notes:
+# - Edits take effect on the next per-turn context build (~5s after save).
+# - Removing an agent from this file does NOT delete their state; it
+#   only stops their project capsule from rendering.
+# - To onboard a new agent, add an entry and restart their tmux session
+#   to pick up the new persona (the capsule itself will refresh on the
+#   next tick without restart).
+
+agents:
+  orchestrator:
+    projects: [metasphere-agents, worldwire, writing, knowledge-forest-poc, cam, funding]
+
+  metasphere-eng:
+    projects: [metasphere-agents]
+  metasphere-critic:
+    projects: [metasphere-agents]
+  metasphere-lead:
+    projects: [metasphere-agents]
+  metasphere-research:
+    projects: [metasphere-agents]
+
+  worldwire-eng:
+    projects: [worldwire]
+  worldwire-critic:
+    projects: [worldwire]
+  worldwire-lead:
+    projects: [worldwire]
+  worldwire-research:
+    projects: [worldwire]
+
+  writing-lead:
+    projects: [writing]
+  writing-research:
+    projects: [writing]
+
+  recurse-research:
+    projects: [knowledge-forest-poc]
+
+  polymarket-agents-polymarket:
+    projects: [polymarket-agents]

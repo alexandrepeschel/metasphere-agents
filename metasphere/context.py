@@ -232,22 +232,20 @@ def _render_mission_capsule(paths: Paths, agent: str) -> str:
 def _infer_project_for_agent(
     paths: Paths, agent: str, agent_dir: Path
 ) -> str | None:
-    """Auto-infer a single project association from the agent's dir
-    layout when MISSION.md frontmatter declares nothing.
+    """Path-based project inference for project-nested agents.
 
-    Resolution chain (frontmatter is handled by the caller; this is
-    the fallback ONLY when frontmatter is absent):
+    Resolution: if the agent's home directory sits at
+    ``~/.metasphere/projects/<P>/agents/@<id>/``, return ``<P>``.
+    Returns ``None`` otherwise.
 
-    1. Path inference: agent home at
-       ``~/.metasphere/projects/<P>/agents/@<agent>/`` → ``<P>``.
-    2. Name-prefix inference: ``@<project>-<role>`` (first dash
-       split) AND ``~/.metasphere/projects/<project>/`` exists →
-       ``<project>``.
-
-    Returns ``None`` when neither matches. Inference yields at most
-    one project — multi-project agents must declare via
-    ``projects: [a, b]`` frontmatter (explicit beats implicit).
-    """
+    This is the LAST-RESORT fallback in the resolution chain — see
+    :func:`_render_project_capsule`. Frontmatter wins; then
+    teams.yaml; then this; then no-op. The B4 name-prefix string-
+    match branch was removed in B7: ``@worldwire-eng`` → ``worldwire``
+    via dash-split was brittle in the general case (e.g.
+    ``@polymarket-agents-research`` first-dash-split to
+    ``polymarket`` which doesn't match project ``polymarket-agents``).
+    teams.yaml is the canonical replacement."""
     try:
         if (
             agent_dir.parent.name == "agents"
@@ -258,12 +256,6 @@ def _infer_project_for_agent(
                 return project
     except Exception:
         pass
-
-    name = agent.lstrip("@")
-    if "-" in name:
-        prefix = name.split("-", 1)[0]
-        if prefix and (paths.projects / prefix).is_dir():
-            return prefix
 
     return None
 
@@ -463,44 +455,50 @@ def _render_project_capsule(paths: Paths, agent: str) -> str:
     """Inject per-project LEARNINGS+MEMORY for projects associated
     with the agent.
 
-    Sources, in precedence order:
+    Resolution chain (highest priority first):
 
-    1. ``project: <name>`` (scalar) or ``projects: [a, b]`` (list)
-       in MISSION.md frontmatter — explicit override / escape hatch,
-       and the only path that supports multi-project agents.
-    2. When frontmatter declares nothing, infer a single project via
-       :func:`_infer_project_for_agent` (dir layout, then name
-       prefix). Lets agents whose MISSION.md predates the
-       per-project memory layer pick up their project's
-       LEARNINGS/MEMORY without an annotation pass (Julian
-       directive 2026-05-29 22:32Z — msg-1780093638).
+    1. **MISSION.md frontmatter** — ``project: <name>`` or
+       ``projects: [a, b]``. Explicit per-agent override, supports
+       multi-project, beats every fallback. Skipped when no
+       MISSION.md exists.
+    2. **teams.yaml** — central agent→projects roster at
+       ``~/.metasphere/teams.yaml``. Supports multi-project natively.
+       Canonical replacement for B4's name-prefix string match
+       (Julian directive 2026-05-29 23:48Z — msg-1780098877).
+    3. **Path-nested inference** — agent home at
+       ``~/.metasphere/projects/<P>/agents/@<id>/`` → ``<P>``.
+       Last-resort fallback for project-nested agents not yet in
+       teams.yaml.
 
-    Returns ``""`` when no source resolves any project, when no
-    project file exists, or when MISSION.md is unreadable.
-    """
+    Returns ``""`` when no source resolves any project."""
     from .specs import _parse_frontmatter
+    from .teams import _lookup_agent_projects
 
     agent_dir = paths.find_agent_dir(agent) or paths.agent_dir(agent)
     mission_file = agent_dir / "MISSION.md"
-    if not mission_file.is_file():
-        return ""
-    try:
-        text = mission_file.read_text(encoding="utf-8")
-    except OSError:
-        return ""
-    fm = _parse_frontmatter(text)
 
     declared: list[str] = []
-    scalar = fm.get("project")
-    if isinstance(scalar, str) and scalar.strip():
-        declared.append(scalar.strip())
-    elif isinstance(scalar, list):
-        declared.extend(p for p in scalar if isinstance(p, str) and p)
-    plural = fm.get("projects")
-    if isinstance(plural, list):
-        declared.extend(p for p in plural if isinstance(p, str) and p)
-    elif isinstance(plural, str) and plural.strip():
-        declared.append(plural.strip())
+    if mission_file.is_file():
+        try:
+            text = mission_file.read_text(encoding="utf-8")
+        except OSError:
+            text = ""
+        if text:
+            fm = _parse_frontmatter(text)
+            scalar = fm.get("project")
+            if isinstance(scalar, str) and scalar.strip():
+                declared.append(scalar.strip())
+            elif isinstance(scalar, list):
+                declared.extend(
+                    p for p in scalar if isinstance(p, str) and p
+                )
+            plural = fm.get("projects")
+            if isinstance(plural, list):
+                declared.extend(
+                    p for p in plural if isinstance(p, str) and p
+                )
+            elif isinstance(plural, str) and plural.strip():
+                declared.append(plural.strip())
 
     seen: set[str] = set()
     ordered: list[str] = []
@@ -509,9 +507,18 @@ def _render_project_capsule(paths: Paths, agent: str) -> str:
             seen.add(p)
             ordered.append(p)
 
-    # Fallback runs only when frontmatter declared nothing. An agent
-    # with explicit ``project: customproject`` keeps that even when
-    # their dir layout or name would infer something different.
+    # (b) teams.yaml lookup — central roster. Supports multi-project.
+    # Runs only when frontmatter declared nothing so explicit
+    # MISSION.md frontmatter remains an unambiguous override.
+    if not ordered:
+        for p in _lookup_agent_projects(agent, paths):
+            if p not in seen and (paths.projects / p).is_dir():
+                seen.add(p)
+                ordered.append(p)
+
+    # (c) Path-nested inference — last-resort single-project fallback
+    # for agents whose home dir sits under ``projects/<P>/agents/``
+    # and don't have a teams.yaml entry yet.
     if not ordered:
         inferred = _infer_project_for_agent(paths, agent, agent_dir)
         if inferred:
