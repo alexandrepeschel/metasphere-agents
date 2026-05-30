@@ -106,6 +106,15 @@ Commands:
                     agent's home. The seeder looks up
                     `templates/agents/<spec.role>/AGENTS.md`
                     (e.g. spec `reviewer` → role `critic`).
+                    Without `--force`, the seeder refuses to
+                    overwrite an existing per-agent `AGENTS.md`.
+                    Use `--force` to re-seed an existing agent
+                    after the shipped template changes (e.g. after
+                    a harness update modifies the runtime nudges
+                    in `templates/agents/<role>/AGENTS.md`). Live
+                    persistent agents do not pick up template
+                    updates automatically — the operator runs this
+                    per-agent.
   specs             List available agent type specs.
 
 Each subcommand has its own --help where additional flags exist.

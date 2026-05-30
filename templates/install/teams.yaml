@@ -18,15 +18,39 @@
 # Schema:
 #   agents:
 #     <agent-name-without-@>:
-#       projects: [<project-name>, ...]
+#       projects: [<project-name>, ...]   # list, even with one entry
+#       # OR equivalently:
+#       # projects: <project-name>         # scalar shorthand
+#
+# Adding a new agent:
+#   1. Add an ``<agent-name>:`` block under ``agents:`` with their
+#      ``projects:`` list.
+#   2. Save. The capsule refreshes on the next per-turn tick (~5s).
+#   3. If the agent already has a live tmux session, no restart is
+#      needed for the capsule itself; restart only if you also
+#      changed their MISSION.md or persona files.
+#
+# Multi-project agents (orchestrator-style):
+#   agents:
+#     orchestrator:
+#       projects: [worldwire, metasphere-agents, writing]
+#   One ``## Project: <name>`` section renders per listed project,
+#   each with its own LEARNINGS/MEMORY recency window + footer.
 #
 # Operator notes:
 # - Edits take effect on the next per-turn context build (~5s after save).
 # - Removing an agent from this file does NOT delete their state; it
 #   only stops their project capsule from rendering.
-# - To onboard a new agent, add an entry and restart their tmux session
-#   to pick up the new persona (the capsule itself will refresh on the
-#   next tick without restart).
+# - Re-running ``install.sh`` is non-overwriting: if this file
+#   already exists on disk, install.sh skips it. Operator edits to
+#   ``~/.metasphere/teams.yaml`` are preserved across upgrades.
+# - To pick up new team-config schema improvements that DO require a
+#   refreshed template, diff this shipped file against
+#   ``~/.metasphere/teams.yaml`` and merge by hand.
+#
+# See ``~/.metasphere/CLAUDE.md`` (the operator manual) for the
+# resolution chain in context and ``docs/PROJECTS.md`` for design
+# rationale.
 
 agents:
   orchestrator:

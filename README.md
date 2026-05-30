@@ -13,7 +13,8 @@ If you already use Claude Code and like its ecosystem — skills, hooks, MCP ser
 - **Multi-agent** — break complex work into child agents that run in parallel with sandboxed permissions. They report back when done.
 - **Projects with transparent tasks** — every task is a markdown file in the project directory. You can read them, edit them, grep them. Nothing is hidden in a database.
 - **Scheduled automation** — cron-style jobs for recurring work (health checks, memory consolidation, periodic reports)
-- **Agent memory** — persistent memory across sessions via daily logs, learnings files, and searchable memory index
+- **Per-project memory** — each project has shared `LEARNINGS.md` (lessons + incidents) and `MEMORY.md` (facts + configs + ongoing state) files that every agent on the team reads. Their per-turn context capsule renders a recency window into these files with a footer pointer to the full path on disk, so agents can `Read` or `grep` for older content when it matters.
+- **Agent memory** — persistent memory across sessions via daily logs, agent-level learnings files, and a searchable memory index
 - **Your Claude Code setup, preserved** — skills, slash commands, MCP servers, hooks, keybindings — everything you've configured in Claude Code works inside your agents. The harness wraps Claude Code, it doesn't replace it.
 
 ## Installation
@@ -232,17 +233,46 @@ To add a job, create a YAML file at `~/.metasphere/cron/<id>.yaml` with the cron
 
 ## Memory
 
-Agents build up persistent memory across sessions:
-- **Daily logs** — narrative entries about what happened, what was learned, what surprised
-- **LEARNINGS.md** — durable insights that should influence future behavior
-- **Searchable index** — full-text search across all past sessions and memory files
-- **Per-project memory** — agents declaring `project: <name>` or `projects: [<a>, <b>]` in `MISSION.md` frontmatter get `~/.metasphere/projects/<name>/LEARNINGS.md` and `MEMORY.md` auto-injected into their context on every turn. Agents whose agent-level files still contain project-specific entries see a one-time migration nudge.
+Memory in metasphere is layered. From most-shared to most-personal:
+
+### Per-project memory (team-shared)
+
+Each project has two files at `~/.metasphere/projects/<name>/`:
+
+- **`LEARNINGS.md`** — what the team learned (incidents, lessons, debugging insights).
+- **`MEMORY.md`** — what the team knows (facts, configs, references, ongoing state).
+
+These are **the primary memory store**. Every agent on the project sees them. Entries are dated `YYYY-MM-DD: title` so the per-turn context capsule can sort by recency and render the newest entries first, with a footer pointing to the absolute path on disk:
+
+```
+_(N more entries omitted by recency. Full file: /home/<user>/.metasphere/projects/<name>/LEARNINGS.md — Read or grep for older.)_
+```
+
+When agents are uncertain on a project-specific fact, they `Read` or `grep` the path from the footer instead of guessing. They're explicitly nudged not to reflex-grep on every project query — only when the answer matters and isn't in their head or capsule.
+
+Agents resolve which project's files they receive via, in order:
+
+1. `project: <name>` or `projects: [a, b]` in their `MISSION.md` frontmatter (explicit override; supports multi-project).
+2. The central agent→projects roster at `~/.metasphere/teams.yaml` (covers agents whose name doesn't follow the `<project>-<role>` convention, like `@spot` or `@orchestrator`).
+3. Path-nested location (agents under `~/.metasphere/projects/<P>/agents/@<id>/` resolve to `<P>`).
+
+### Agent-level memory (per-agent persistent state)
+
+- **Daily logs** — narrative entries about what happened, what was learned, what surprised.
+- **`LEARNINGS.md` / `MEMORY.md`** under each agent's home (`~/.metasphere/agents/@<id>/`) — agent-specific knowledge that doesn't belong to a team.
+- **Searchable index** — full-text search across all past sessions and memory files.
+
+### Auto-memory (cross-conversation residue)
+
+Claude Code's `~/.claude/projects/...` per-conversation residue — secondary to the project files, useful for recent-context recall but not authoritative.
 
 ```bash
 metasphere memory search "query"   # Search agent memory
 ```
 
 From Telegram: `/memory <query>` searches the same index.
+
+See `~/.metasphere/CLAUDE.md` (installed by `install.sh`) for the operator-level walkthrough and `docs/PROJECTS.md` for the design rationale.
 
 ## System Management
 

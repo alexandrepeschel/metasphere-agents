@@ -101,6 +101,75 @@ own decomposition, member coordination, and verification within
 their project. The lead inherits the same delegation discipline
 as you, scoped to their project.
 
+## Per-project memory
+
+Each project has two team-shared memory files at
+`~/.metasphere/projects/<name>/`:
+
+- **`LEARNINGS.md`** — what the team learned (incidents, lessons,
+  debugging insights).
+- **`MEMORY.md`** — what the team knows (facts, configs, references,
+  ongoing state).
+
+These files are **the primary memory store** for everyone on the
+team. Entries are dated `YYYY-MM-DD: title`. The per-turn context
+hook renders a recency window (newest entries first, within a byte
+budget) into each member's context block under a `## Project:
+<name>` heading, with a footer that cites the absolute on-disk path:
+
+```
+_(N more entries omitted by recency. Full file: /home/<user>/.metasphere/projects/<name>/LEARNINGS.md — Read or grep for older.)_
+```
+
+When an agent doesn't have an answer in their capsule and the
+question matters, they `Read` or `grep` the file directly using the
+path from the footer. Per-role `AGENTS.md` nudges them toward this
+pattern but explicitly NOT to reflex-grep on every project query
+(would dilute reasoning). The capsule is the recency lens; the full
+files are the primary store.
+
+### How an agent's project is resolved
+
+The capsule is injected when the agent resolves to one or more
+projects. Resolution chain (highest priority first):
+
+1. **`MISSION.md` frontmatter** — `project: <name>` (scalar) or
+   `projects: [a, b]` (list). Explicit override; supports
+   multi-project.
+2. **`~/.metasphere/teams.yaml`** — central agent→projects roster.
+   Covers agents whose name doesn't follow the `<project>-<role>`
+   convention (e.g. `@spot`, `@orchestrator`). Multi-project
+   natively. Schema at the top of the file; edits land within one
+   turn.
+3. **Path-nested location** — agents living at
+   `~/.metasphere/projects/<P>/agents/@<id>/` resolve to `<P>`.
+4. No capsule otherwise.
+
+Name-prefix string matching (`@<project>-<role>` → `<project>` by
+dash-split) was used briefly but found brittle (e.g.
+`@polymarket-agents-research` first-dash-splits to `polymarket`
+which doesn't match project `polymarket-agents`). Replaced by
+`teams.yaml`.
+
+### Auto-memory layer
+
+Claude Code's auto-memory at `~/.claude/projects/...` is
+cross-conversation residue — secondary to the project files. Useful
+for recent-context recall, not authoritative for project facts.
+
+### Live agents and template updates
+
+When a per-role `AGENTS.md` template is updated, existing live
+persistent agents don't pick up the new content until re-seeded:
+
+```bash
+metasphere agent seed --spec <spec-name> --force
+```
+
+Without `--force`, the seeder refuses to overwrite an existing
+file. Run this manually for each agent after updating their role's
+template; daemons don't auto-re-seed.
+
 ## Teams
 
 For non-trivial multi-agent work, wake a team rather than spawning
