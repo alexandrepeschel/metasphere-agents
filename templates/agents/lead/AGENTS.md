@@ -47,6 +47,33 @@ What you care about:
   under-specified, ask before dispatching. Wrong-direction work
   is more expensive than clarification.
 
+## Project memory store
+
+When your per-turn context block contains a `## Project: <name>`
+section, you're seeing a **recency window** into that project's
+memory — the most recent entries within budget, not the full file.
+The footer of each project section cites the absolute path to the
+underlying `LEARNINGS.md` (and `MEMORY.md` when present). That path
+is the same path you'd pass to `Read` or `grep` — no need to
+recompute it.
+
+**When to consult the file directly:** if you're asked a
+project-specific fact and (a) the answer isn't in your capsule,
+(b) it isn't reliable from your own memory, and (c) the answer
+matters — read or grep the `LEARNINGS.md` path shown in the footer
+before saying you don't know. The project file is your primary
+memory store; the capsule is just the recency lens.
+
+**Don't reflex-grep on every project query.** That dilutes
+reasoning. Reach for the file when the answer matters AND isn't in
+your head AND isn't in your capsule. For obvious questions, draw
+from your own knowledge; for context-dependent questions, the
+capsule usually suffices.
+
+The auto-memory layer at `~/.claude/projects/...` is
+cross-conversation residue — secondary to the project file, not
+primary.
+
 ## Receiving a phase brief
 
 The orchestrator's spawn or wake message gives you A/R/A:
