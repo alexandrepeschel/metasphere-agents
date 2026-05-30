@@ -194,27 +194,19 @@ _MISSION_LINE_CAP = 30
 # needed here.
 _PROJECT_FILE_BYTE_CAP = 2048
 
-# Inbox sample size for query-signal extraction. Capped at 5 because
-# older messages (a) score weakly and (b) inflate stopword noise.
-_PROJECT_QUERY_INBOX_SAMPLE = 5
+# Reserve at the tail of a per-file render for the always-on
+# file-path-pointer footer. Sized to fit:
+#   "_(N more entries omitted by recency. Full file: "
+#   + path string up to ~120B  + " — Read or grep for older.)_"
+# Real paths in production land around 60–80B
+# (``/home/<user>/.metasphere/projects/<proj>/LEARNINGS.md``), so 200B
+# is comfortable headroom without crowding actual content.
+_PROJECT_FOOTER_RESERVE = 200
 
-# Token shape: starts alpha, ≥3 chars total. Strips short noise
-# ("a", "pg", "to") and anything beginning with a digit/symbol.
-_PROJECT_TOKEN_RE = re.compile(r"[a-zA-Z][a-zA-Z0-9_-]{2,}")
-
-# Hardcoded stopword set — small (~30) to keep tokenization cheap and
-# avoid pulling NLTK / spacy for a feature that runs every turn.
-_PROJECT_STOPWORDS = frozenset({
-    "the", "and", "for", "are", "was", "this", "that", "with", "from",
-    "but", "not", "you", "your", "have", "has", "had", "will", "would",
-    "should", "can", "could", "into", "than", "then", "what", "when",
-    "where", "which", "who", "why", "how", "all", "any", "out", "yes",
-})
-
-# Reserve at the tail of a per-file render for the "N more entries"
-# footer. ~80 bytes covers the largest plausible footer phrasing
-# without crowding actual content.
-_PROJECT_FOOTER_RESERVE = 80
+# Header-anchored ISO date pattern (YYYY-MM-DD). The migration
+# ephemerals + manual entry-write discipline both prefix entries with
+# an ISO date; we sort by this when present.
+_PROJECT_DATE_RE = re.compile(r"\b(\d{4}-\d{2}-\d{2})\b")
 
 
 def _render_mission_capsule(paths: Paths, agent: str) -> str:
@@ -276,56 +268,6 @@ def _infer_project_for_agent(
     return None
 
 
-def _tokenize_query(text: str) -> set[str]:
-    """Lowercase token set with stopwords dropped. Returns empty for
-    empty input. Token shape per ``_PROJECT_TOKEN_RE`` (alpha-led, ≥3
-    chars)."""
-    if not text:
-        return set()
-    out: set[str] = set()
-    for tok in _PROJECT_TOKEN_RE.findall(text):
-        low = tok.lower()
-        if low not in _PROJECT_STOPWORDS:
-            out.add(low)
-    return out
-
-
-def _extract_query_signal(paths: Paths, agent: str) -> set[str]:
-    """Pull keyword tokens that approximate "what is the agent thinking
-    about right now". Sources, cheapest first:
-
-    1. Last ``_PROJECT_QUERY_INBOX_SAMPLE`` messages from the agent's
-       inbox (recent !task / !info / !query bodies — high signal:
-       the words the team is using to describe the immediate work).
-    2. The agent's MISSION.md body — slow-changing, but anchors the
-       agent's domain ("worldwire", "tunnel", "pipeline", etc.).
-
-    Returns the union as a stopword-filtered token set. Empty when
-    both sources are empty — caller falls back to head-of-file.
-
-    No ``view=True`` on the inbox read: this is a context build, not
-    a user-facing inbox listing, and we don't want to flip messages
-    from unread → read as a side effect of rendering."""
-    parts: list[str] = []
-    try:
-        msgs = _msgs.collect_inbox(paths.scope, paths.project_root)
-    except Exception:
-        msgs = []
-    for m in msgs[:_PROJECT_QUERY_INBOX_SAMPLE]:
-        if m.body:
-            parts.append(m.body)
-
-    agent_dir = paths.find_agent_dir(agent) or paths.agent_dir(agent)
-    mission_file = agent_dir / "MISSION.md"
-    if mission_file.is_file():
-        try:
-            parts.append(mission_file.read_text(encoding="utf-8"))
-        except OSError:
-            pass
-
-    return _tokenize_query(" ".join(parts))
-
-
 def _parse_markdown_entries(text: str) -> list[tuple[str, str]]:
     """Walk markdown text, yield ``(header_line, body)`` tuples at
     ``##`` or ``###`` boundaries.
@@ -380,91 +322,92 @@ def _format_entry(header: str, body: str) -> str:
     return header or body
 
 
-def _rank_entries(
+def _sort_entries_by_recency(
     entries: list[tuple[str, str]],
-    query: set[str],
-    budget: int,
-) -> tuple[list[tuple[str, str]], int]:
-    """Rank ``entries`` by ``|query ∩ entry_tokens|`` and greedy-fill
-    within ``budget`` bytes.
+) -> list[tuple[str, str]]:
+    """Sort ``entries`` so the newest dated entries come first.
 
-    Returns ``(rendered, omitted)`` where ``rendered`` is the chosen
-    subset in score-descending order (most relevant first — orch wants
-    load-bearing entries at the TOP of the section so outer truncation
-    can't bury them again) and ``omitted`` counts entries dropped for
-    score-0 OR budget reasons.
+    Anchor: ``YYYY-MM-DD`` somewhere in the header line. Headers
+    without a parseable date sort AFTER all dated entries, in their
+    original document order. Among dated entries, sort key is
+    ``(-date, original_index)`` so ties (same date) preserve the
+    file's relative order — stable, deterministic, predictable.
 
-    Skips entries with ``score == 0`` (relevance path only keeps
-    matches; the cold-start path handles zero-signal selection). Skips
-    entries that exceed ``budget`` alone — no mid-entry cuts."""
-    if not entries or budget <= 0 or not query:
-        return [], len(entries)
-
-    scored: list[tuple[int, int, str, str]] = []
-    for idx, (header, body) in enumerate(entries):
-        tokens = _tokenize_query(header + "\n" + body)
-        score = len(query & tokens)
-        scored.append((score, idx, header, body))
-    scored.sort(key=lambda s: (-s[0], s[1]))
-
-    rendered: list[tuple[str, str]] = []
-    used = 0
-    sep = len("\n\n".encode("utf-8"))
-    for score, _idx, header, body in scored:
-        if score == 0:
-            break
-        cost = _entry_render_cost(header, body)
-        cost += sep if rendered else 0
-        if used + cost > budget:
-            continue
-        rendered.append((header, body))
-        used += cost
-    omitted = len(entries) - len(rendered)
-    return rendered, omitted
+    The migration ephemerals + manual entry-write discipline both
+    front-date entries with ISO dates, so the parser hits the
+    common case; the original-order fallback covers preambles, H1s,
+    and any pre-date legacy entries without surprise."""
+    if not entries:
+        return []
+    keyed: list[tuple[int, str, int, tuple[str, str]]] = []
+    for idx, entry in enumerate(entries):
+        header = entry[0]
+        m = _PROJECT_DATE_RE.search(header) if header else None
+        if m:
+            # Dated entry: bucket 0, sort date desc via inverse.
+            keyed.append((0, m.group(1), idx, entry))
+        else:
+            # Undated entry: bucket 1 (after all dated), preserve idx.
+            keyed.append((1, "", idx, entry))
+    # bucket asc (dated first), date desc within dated via inversion,
+    # idx asc for tiebreak within both buckets.
+    keyed.sort(
+        key=lambda k: (k[0], _inverse_date(k[1]) if k[1] else "", k[2])
+    )
+    return [e for _b, _d, _i, e in keyed]
 
 
-def _fit_head_entries(
-    entries: list[tuple[str, str]], budget: int,
-) -> tuple[list[tuple[str, str]], int]:
-    """Cold-start / no-match fit: walk entries in document order and
-    take until ``budget`` runs out. Skips entries too large to fit
-    alone rather than stopping — keeps the early-skip → later-fit
-    behavior consistent with the rank path."""
-    if not entries or budget <= 0:
-        return [], len(entries)
-    rendered: list[tuple[str, str]] = []
-    used = 0
-    sep = len("\n\n".encode("utf-8"))
-    for header, body in entries:
-        cost = _entry_render_cost(header, body)
-        cost += sep if rendered else 0
-        if used + cost > budget:
-            continue
-        rendered.append((header, body))
-        used += cost
-    return rendered, len(entries) - len(rendered)
+def _inverse_date(date_str: str) -> str:
+    """Invert an ISO date string for descending sort under a stable
+    ascending sort. ``2026-05-29`` → string sortable so that newer
+    dates produce smaller values. We do this by char-complementing
+    digits against '9'."""
+    out_chars: list[str] = []
+    for ch in date_str:
+        if ch.isdigit():
+            out_chars.append(str(9 - int(ch)))
+        else:
+            out_chars.append(ch)
+    return "".join(out_chars)
 
 
-def _render_project_file(
-    path: Path, query: set[str], budget: int,
-) -> str:
-    """Read ``path`` and return the relevance-ranked, entry-aware body
-    suitable for inclusion under a ``### LEARNINGS`` or ``### MEMORY``
-    subheading.
+def _build_footer(omitted: int, file_path: Path) -> str:
+    """Always-on file-path pointer footer. Tells the agent where the
+    full file lives so they can ``Read`` or ``grep`` for older
+    entries that didn't fit. ``omitted == 0`` still emits the
+    pointer — the agent should always know the file's on-disk
+    location.
 
-    Selection order:
+    Wording is unified across the truncated and non-truncated cases
+    so downstream parsers and grep checks have a single pattern to
+    match against."""
+    path_str = str(file_path)
+    if omitted > 0:
+        noun = "entry" if omitted == 1 else "entries"
+        return (
+            f"_({omitted} more {noun} omitted by recency. "
+            f"Full file: {path_str} — Read or grep for older.)_"
+        )
+    return (
+        f"_(Full file: {path_str} — Read or grep for older entries.)_"
+    )
 
-    1. **Relevance path** — non-empty query AND at least one entry
-       scores > 0: render top-scoring entries in score-descending
-       order until ``budget`` is hit. Append a footer if entries were
-       dropped.
-    2. **Cold-start / no-match fallback** — query is empty OR every
-       entry scored 0: render head-of-file entries in document order
-       until ``budget`` is hit. Footer added when entries are dropped.
 
-    Files with no ``##``/``###`` headers (e.g. flat prose) fall back
-    to byte-truncated head, preserving pre-B5 behavior on
-    unstructured content."""
+def _render_project_file(path: Path, budget: int) -> str:
+    """Read ``path`` and return entry-aware, recency-sorted body
+    suitable for inclusion under ``### LEARNINGS`` / ``### MEMORY``.
+
+    Selection: parse → sort by recency (dated newest-first, undated
+    after in file order) → greedy-fill within budget skipping
+    overlarge entries (no mid-entry cuts) → append always-on
+    file-path-pointer footer.
+
+    On degenerate budgets where even the footer wouldn't fit
+    alongside any entry, the footer wins — orch's "always tell the
+    agent where the file is" constraint dominates.
+
+    Files with no ``##``/``###`` headers fall back to byte-truncated
+    head + footer."""
     if not path.is_file() or budget <= 0:
         return ""
     try:
@@ -476,28 +419,43 @@ def _render_project_file(
 
     entries = _parse_markdown_entries(text)
     if not entries:
-        data = text.strip().encode("utf-8")[:budget]
-        return data.decode("utf-8", errors="ignore").rstrip()
+        # Flat prose: byte-truncate the head, still emit pointer.
+        footer = _build_footer(0, path)
+        footer_cost = len(footer.encode("utf-8")) + 2  # +sep
+        head_budget = max(budget - footer_cost, 0)
+        data = text.strip().encode("utf-8")[:head_budget]
+        head = data.decode("utf-8", errors="ignore").rstrip()
+        if head:
+            return head + "\n\n" + footer
+        return footer
 
-    # Reserve room for the truncation footer so omissions don't push
-    # actual content past the budget edge.
-    effective = max(budget - _PROJECT_FOOTER_RESERVE, 1)
+    sorted_entries = _sort_entries_by_recency(entries)
+
+    # Reserve budget for the footer so it always lands. The footer
+    # text length depends on ``omitted``, but the longest form
+    # (truncated case) bounds it — use that for the reserve.
+    longest_footer = _build_footer(len(entries), path)
+    reserve = max(
+        len(longest_footer.encode("utf-8")) + 2,  # +sep
+        _PROJECT_FOOTER_RESERVE,
+    )
+    effective = max(budget - reserve, 1)
 
     rendered: list[tuple[str, str]] = []
-    omitted = len(entries)
-    if query:
-        rendered, omitted = _rank_entries(entries, query, effective)
+    used = 0
+    sep = 2  # "\n\n"
+    for header, body in sorted_entries:
+        cost = _entry_render_cost(header, body)
+        cost += sep if rendered else 0
+        if used + cost > effective:
+            continue
+        rendered.append((header, body))
+        used += cost
 
-    if not rendered:
-        rendered, omitted = _fit_head_entries(entries, effective)
-
-    if not rendered:
-        return ""
-
+    omitted = len(entries) - len(rendered)
+    footer = _build_footer(omitted, path)
     parts = [_format_entry(h, b) for h, b in rendered]
-    if omitted > 0:
-        noun = "entry" if omitted == 1 else "entries"
-        parts.append(f"_({omitted} more {noun} omitted.)_")
+    parts.append(footer)
     return "\n\n".join(parts)
 
 
@@ -562,16 +520,13 @@ def _render_project_capsule(paths: Paths, agent: str) -> str:
     if not ordered:
         return ""
 
-    # Pull turn-fresh query signal once (inbox + MISSION body) and
-    # share it across every project file. Cheap — both sources are
-    # already mmapped/seeked in the same per-turn build pass.
-    query = _extract_query_signal(paths, agent)
-
     # Divide the section budget across declared projects and split
     # 60/40 LEARNINGS/MEMORY within each. Under the canonical single-
     # project case (worldwire-eng), this gives LEARNINGS ~1228B and
-    # MEMORY ~819B — both deep enough to land the load-bearing entry
-    # under relevance ranking.
+    # MEMORY ~819B — both deep enough to land the most recent dated
+    # entries under recency sort. ``_render_project_file`` then carves
+    # the footer reserve internally so the always-on file-path pointer
+    # always lands.
     per_project = max(_PROJECT_FILE_BYTE_CAP // max(len(ordered), 1), 512)
     learn_budget = int(per_project * 0.6)
     mem_budget = per_project - learn_budget
@@ -580,10 +535,10 @@ def _render_project_capsule(paths: Paths, agent: str) -> str:
     for p in ordered:
         proj_dir = paths.projects / p
         learnings = _render_project_file(
-            proj_dir / "LEARNINGS.md", query, learn_budget,
+            proj_dir / "LEARNINGS.md", learn_budget,
         )
         memory = _render_project_file(
-            proj_dir / "MEMORY.md", query, mem_budget,
+            proj_dir / "MEMORY.md", mem_budget,
         )
         parts: list[str] = []
         if learnings:
