@@ -650,7 +650,7 @@ def _render_project_migration_nudge(paths: Paths, agent: str) -> str:
         return ""
 
     proj_list = ", ".join(matched_tokens)
-    noun = "entry" if total_hits == 1 else "entries"
+    noun = "reference" if total_hits == 1 else "references"
     body = (
         "## Per-project memory migration\n\n"
         f"{total_hits} {noun} in your agent-level LEARNINGS/MEMORY "
