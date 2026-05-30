@@ -208,6 +208,68 @@ def test_run_audit_filters_auto_version_bumps(tmp_path, tmp_paths):
     assert "3 commit(s)" in report
 
 
+def test_is_changelog_self_update_recognizes_bookkeeping_subject():
+    # Canonical shape from prior changelog backfills.
+    assert A._is_changelog_self_update(
+        "docs(changelog): 2026-05-29 to 2026-05-30 — per-project memory"
+    )
+    assert A._is_changelog_self_update(
+        "docs(changelog): backfill 2026-05-25 → 2026-05-27 entry"
+    )
+    # Case-insensitive on the scope marker (the regex stays exact in
+    # the bump filter; keep symmetry by matching on the lowercased
+    # prefix so a stray capitalisation doesn't leak past the filter).
+    assert A._is_changelog_self_update(
+        "DOCS(CHANGELOG): backfill week"
+    )
+    # Real docs that are NOT the changelog backfill must survive — the
+    # filter has to leave actual documentation work in the audit.
+    assert not A._is_changelog_self_update("docs(agent seed): lift --force semantics")
+    assert not A._is_changelog_self_update("docs: per-project memory architecture")
+    assert not A._is_changelog_self_update("docs(readme): tweak link")
+    # Non-docs commits never match even if they mention CHANGELOG.
+    assert not A._is_changelog_self_update("feat(audit-docs): filter CHANGELOG self-refs")
+
+
+def test_run_audit_filters_changelog_self_updates(tmp_path, tmp_paths):
+    """A ``docs(changelog):`` commit can't cite its own SHA in the
+    entry it just added, so the same-day SHA filter in
+    ``_changelog_documented_shas`` can't catch it. Without a dedicated
+    filter the bookkeeping commit gets re-reported on the next audit
+    as if it were undocumented work — exact false-positive class as
+    the auto-bumps (ff3977a closed the cited-commit case; this closes
+    the meta-commit case)."""
+    repo = _make_repo(tmp_path / "proj-changelogfilter")
+    (repo / "CHANGELOG.md").write_text("## 2020-01-01 — ancient\n")
+    # One real feature, one bookkeeping `docs(changelog):` commit
+    # documenting prior work, one more real fix. After filtering only
+    # the two non-bookkeeping commits should appear in the report.
+    (repo / "f.py").write_text("x = 1\n")
+    _git(repo, "add", "f.py")
+    _git(repo, "commit", "-q", "-m", "feat: shipped feature")
+    (repo / "CHANGELOG.md").write_text(
+        "## 2020-01-01 — ancient\n\n## 2026-05-30 — backfill\n\n- `abc1234` thing\n"
+    )
+    _git(repo, "add", "CHANGELOG.md")
+    _git(repo, "commit", "-q", "-m",
+         "docs(changelog): 2026-05-30 backfill — feature documented")
+    (repo / "f.py").write_text("x = 2\n")
+    _git(repo, "add", "f.py")
+    _git(repo, "commit", "-q", "-m", "fix: shipped fix")
+    _register(tmp_paths, "proj-changelogfilter", repo)
+
+    _rc, path = A._run_audit(
+        "proj-changelogfilter", paths=tmp_paths,
+        output_dir=tmp_path / "audits", notify=False,
+    )
+    report = path.read_text()
+    assert "shipped feature" in report
+    assert "shipped fix" in report
+    # The bookkeeping subject must NOT leak into the audit.
+    assert "docs(changelog):" not in report
+    assert "2026-05-30 backfill — feature documented" not in report
+
+
 def test_git_log_since_parses_subject_and_files(tmp_path):
     repo = _make_repo(tmp_path / "repo")
     (repo / "src.py").write_text("x = 1\n")

@@ -107,6 +107,21 @@ def _is_auto_version_bump(subject: str) -> bool:
     return bool(_AUTO_VERSION_BUMP_RE.match(subject.strip()))
 
 
+def _is_changelog_self_update(subject: str) -> bool:
+    """Return True if the commit's job is to write the CHANGELOG entry
+    that documents prior work — i.e. a ``docs(changelog):`` commit.
+
+    Structural false-positive class missed by the same-day SHA filter
+    in ``_changelog_documented_shas``: the entry being added can't
+    cite the meta-commit's own SHA, so on the next audit the
+    bookkeeping commit gets re-reported as if it needed a CHANGELOG
+    entry of its own. Same shape as the auto-version-bump filter (and
+    the staleness-flag docs-skip) — drop them here so the operator
+    doesn't see the entry they just shipped re-cited as new work.
+    """
+    return subject.strip().lower().startswith("docs(changelog):")
+
+
 def _changelog_newest_date(changelog: Path) -> Optional[str]:
     """Extract the newest ISO date from a CHANGELOG.md. Looks for lines
     starting with ``## `` in one of three shapes:
@@ -422,6 +437,7 @@ def _run_audit(project_name: str, *, paths: Paths,
     if documented:
         records = [r for r in records if r["sha"][:7].lower() not in documented]
     records = [r for r in records if not _is_auto_version_bump(r["subject"])]
+    records = [r for r in records if not _is_changelog_self_update(r["subject"])]
     stale = _staleness_flags(records)
     report = _render_report(project_name, since, records, stale)
 
