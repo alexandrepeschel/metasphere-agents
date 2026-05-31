@@ -304,6 +304,11 @@ def seed_agent(
     Copies SOUL.md and MISSION.md from the spec, applies variable
     substitution, and generates persona-index.md + LEARNINGS.md.
 
+    AGENTS.md is sourced separately from ``templates/agents/<spec.role>/``,
+    not from the spec dir — so a spec named ``monitor`` with
+    ``role: explorer`` correctly yields monitor's SOUL/MISSION + the
+    shared explorer AGENTS.md runtime contract.
+
     Idempotent unless ``force=True`` — won't overwrite existing files.
     Returns the agent directory path.
     """
