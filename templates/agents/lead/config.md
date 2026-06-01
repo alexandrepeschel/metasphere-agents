@@ -1,5 +1,5 @@
 ---
-name: planner
+name: lead
 role: lead
 description: Designs implementation plans and architecture decisions
 sandbox: readonly

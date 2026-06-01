@@ -22,33 +22,36 @@ be re-templated, but every new spawn picks it up.
 
 ## `agents/<role>/`
 
-Per-**role** runtime guidelines copied into a **persistent agent**'s
-home (`~/.metasphere/agents/<id>/AGENTS.md`) when `metasphere agent
-seed --spec <name>` runs. The seeder reads the spec's `role:` field
-(from `specs/<name>/config.md`) and copies the matching
-`templates/agents/<role>/AGENTS.md` — see
-`metasphere/specs.py::_find_agents_md_template`. Current set:
+Per-**role** spec directories. Each role owns the full persona stack —
+`SOUL.md`, `MISSION.md`, `AGENTS.md`, `config.md` — in a single dir,
+copied into a persistent agent's home (`~/.metasphere/agents/<id>/`)
+when `metasphere agent seed --spec <role> @<agent>` runs. Current set:
 
-- `critic/` — review-gate agents (seeded by spec `reviewer`)
-- `designer/` — UX / visual-direction agents (seeded by spec `designer`)
-- `eng/` — implementation agents (seeded by spec `implementer`)
-- `explorer/` — autonomous exploration agents (seeded by spec `monitor`)
-- `lead/` — team-lead agents (seeded by spec `planner`)
-- `researcher/` — research / investigation agents (seeded by spec `researcher`)
-- `orchestrator/` — orchestrator personae (seeded by `install.sh`, no spec)
+- `critic/` — review-gate agents
+- `designer/` — interaction-designer agents (config + AGENTS.md only;
+  no SOUL/MISSION ships — designer is a project-scoped role)
+- `eng/` — implementation agents
+- `explorer/` — autonomous exploration agents
+- `lead/` — team-lead agents
+- `researcher/` — research / investigation agents
+- `orchestrator/` — orchestrator personae (config + AGENTS.md only;
+  persona seeded by `install.sh` heredoc, not via `seed_agent`)
 
-`metasphere update`'s drift-check resolves an agent's role from its
-config sidecar and matches against `templates/agents/<role>/` (see
-`metasphere/update.py::_agent_role`).
+See `templates/agents/README.md` for the per-role contract and
+`metasphere/specs.py` for the resolver. `metasphere update`'s
+drift-check resolves an agent's role from its config sidecar and
+matches against `templates/agents/<role>/`.
 
-Adding a new spec:
-1. Create `specs/<name>/` with `SOUL.md`, `MISSION.md`, and
-   `config.md` (frontmatter declares `name:`, `role:`, `sandbox:`).
-   `list_specs()` discovers it via directory scan — no Python edit.
-2. If the spec's `role:` is new, create
-   `templates/agents/<role>/AGENTS.md` for the runtime guidelines.
-   Existing roles reuse the shared `AGENTS.md` so behavior can
-   evolve in one place across all specs sharing the role.
+Adding a new role:
+1. Create `templates/agents/<role>/` with `config.md` (frontmatter
+   declares `name:`, `role:`, `sandbox:`) plus whichever of
+   `SOUL.md` / `MISSION.md` / `AGENTS.md` apply. `list_specs()`
+   discovers it via directory scan — no Python edit.
+2. Convention: `name:` and `role:` are the same string for shipped
+   roles, both equal to the directory name. User overrides under
+   `~/.metasphere/templates/agents/<role>/` (canonical) or the
+   legacy `~/.metasphere/specs/<custom>/` (deprecated, still
+   searched) can decouple `name:` from `role:`.
 
 ## `install/`
 

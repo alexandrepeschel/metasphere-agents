@@ -1,5 +1,5 @@
 ---
-name: implementer
+name: eng
 role: eng
 description: Implements features and fixes in isolated worktrees
 sandbox: scoped

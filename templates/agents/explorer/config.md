@@ -1,5 +1,5 @@
 ---
-name: monitor
+name: explorer
 role: explorer
 description: Scheduled monitoring — health checks, anomaly detection, alerts
 sandbox: scoped

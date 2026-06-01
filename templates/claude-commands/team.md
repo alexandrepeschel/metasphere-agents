@@ -13,11 +13,11 @@ $ARGUMENTS
 
 Parse `$ARGUMENTS` as `<action> [args...]`:
 
-- **`review [scope]`** — invoke a reviewer agent on the current diff or specified scope
-- **`research "<topic>"`** — invoke a researcher agent with a brief
-- **`implement "<task>"`** — invoke an implementer agent with a task description
-- **`plan "<goal>"`** — invoke a planner agent with a goal
-- **`monitor "<target>"`** — invoke a monitor agent on a target
+- **`review [scope]`** — invoke a `critic` agent on the current diff or specified scope
+- **`research "<topic>"`** — invoke a `researcher` agent with a brief
+- **`implement "<task>"`** — invoke an `eng` agent with a task description
+- **`plan "<goal>"`** — invoke a `lead` agent with a goal
+- **`monitor "<target>"`** — invoke an `explorer` agent on a target
 - **`assemble <project> [spec1 spec2 ...]`** — seed + wake multiple agents for a project
 - **`status`** — show all team members and their status
 - **`specs`** — list available agent specs
@@ -27,7 +27,7 @@ Parse `$ARGUMENTS` as `<action> [args...]`:
 
 For `review`, `research`, `implement`, `plan`, `monitor`:
 
-1. Determine the spec name from the action (e.g. `review` → spec `reviewer`)
+1. Determine the spec name from the action (e.g. `review` → spec `critic`, `implement` → spec `eng`, `plan` → spec `lead`, `monitor` → spec `explorer`, `research` → spec `researcher`)
 2. Check if a matching persistent agent already exists for the current project:
    - Look at the project's members list in `project.json`
    - Or check `~/.metasphere/agents/` for agents with a matching `spec` file
@@ -57,7 +57,7 @@ For `review`, `research`, `implement`, `plan`, `monitor`:
 For `assemble <project> [spec1 spec2 ...]`:
 
 1. If specs are listed, seed + wake each one for the project
-2. If no specs listed, use a default team: `reviewer researcher implementer planner`
+2. If no specs listed, use a default team: `critic researcher eng lead`
 3. For each spec:
    - `metasphere agent seed --spec <spec> @<project>-<spec> --project <project>`
    - Add as project member if not already: `metasphere project member add @<agent> --role <role> --persistent`

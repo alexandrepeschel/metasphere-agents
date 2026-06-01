@@ -126,7 +126,7 @@ def test_seed_project_user_md_idempotent(tmp_paths):
 def test_seed_agent_links_user_md_for_project_scoped(tmp_paths):
     """Project-scoped agent gets a symlink USER.md -> project's USER.md."""
     _register_project(tmp_paths, "alpha")
-    spec = _seed_test_spec(tmp_paths.project_root / "specs" / "researcher",
+    spec = _seed_test_spec(tmp_paths.project_root / "templates" / "agents" / "researcher",
                            name="researcher", role="researcher")
     agent_dir = _specs.seed_agent(
         "@alpha-research", spec,
@@ -146,7 +146,7 @@ def test_seed_agent_links_user_md_for_project_scoped(tmp_paths):
 
 def test_seed_agent_skips_user_md_for_root_scoped(tmp_paths):
     """Root-scoped agent (no project_name) does not get USER.md handling."""
-    spec = _seed_test_spec(tmp_paths.project_root / "specs" / "researcher",
+    spec = _seed_test_spec(tmp_paths.project_root / "templates" / "agents" / "researcher",
                            name="researcher", role="researcher")
     agent_dir = _specs.seed_agent(
         "@root-research", spec, paths=tmp_paths,
@@ -158,7 +158,7 @@ def test_seed_agent_skips_user_md_for_root_scoped(tmp_paths):
 def test_seed_agent_two_agents_share_one_project_user_md(tmp_paths):
     """Two agents on the same project share the same USER.md target."""
     _register_project(tmp_paths, "alpha")
-    spec = _seed_test_spec(tmp_paths.project_root / "specs" / "researcher",
+    spec = _seed_test_spec(tmp_paths.project_root / "templates" / "agents" / "researcher",
                            name="researcher", role="researcher")
     a = _specs.seed_agent(
         "@alpha-research", spec, project_name="alpha", project_goal="g1",
@@ -180,7 +180,7 @@ def test_seed_agent_user_md_no_template_leaves_unset(tmp_paths, monkeypatch):
     """If the shipped template is unavailable, USER.md handling no-ops."""
     monkeypatch.setattr(_specs, "_find_user_md_template", lambda: None)
     _register_project(tmp_paths, "alpha")
-    spec = _seed_test_spec(tmp_paths.project_root / "specs" / "researcher",
+    spec = _seed_test_spec(tmp_paths.project_root / "templates" / "agents" / "researcher",
                            name="researcher", role="researcher")
     agent_dir = _specs.seed_agent(
         "@alpha-research", spec,
@@ -193,7 +193,7 @@ def test_seed_agent_user_md_no_template_leaves_unset(tmp_paths, monkeypatch):
 def test_seed_agent_preserves_existing_agent_user_md(tmp_paths):
     """Operator-customized agent USER.md is not clobbered by re-seeding."""
     _register_project(tmp_paths, "alpha")
-    spec = _seed_test_spec(tmp_paths.project_root / "specs" / "researcher",
+    spec = _seed_test_spec(tmp_paths.project_root / "templates" / "agents" / "researcher",
                            name="researcher", role="researcher")
     a = _specs.seed_agent(
         "@alpha-research", spec, project_name="alpha", project_goal="g",
@@ -229,7 +229,7 @@ def test_seed_agent_preserves_existing_agent_user_md(tmp_paths):
 )
 def test_seed_agent_rejects_invalid_names(tmp_paths, bad_name):
     spec = _seed_test_spec(
-        tmp_paths.project_root / "specs" / "researcher",
+        tmp_paths.project_root / "templates" / "agents" / "researcher",
         name="researcher", role="researcher",
     )
     with pytest.raises(ValueError):
@@ -237,3 +237,30 @@ def test_seed_agent_rejects_invalid_names(tmp_paths, bad_name):
     # No ghost agent dir for the bad name (either raw or @-prefixed).
     assert not (tmp_paths.agents / bad_name).exists()
     assert not (tmp_paths.agents / f"@{bad_name}").exists()
+
+
+# ---------- legacy spec-name resolution ----------
+
+@pytest.mark.parametrize(
+    "legacy,new",
+    [
+        ("implementer", "eng"),
+        ("planner", "lead"),
+        ("reviewer", "critic"),
+        ("monitor", "explorer"),
+    ],
+)
+def test_get_spec_legacy_name_returns_none_and_warns(
+    tmp_paths, caplog, legacy, new,
+):
+    """Legacy spec names (pre-collapse) resolve to None but the warning
+    names the new spec so operators can fix shell aliases / scripts
+    without us preserving the alias map as a live code path."""
+    import logging
+    with caplog.at_level(logging.WARNING, logger="metasphere.specs"):
+        result = _specs.get_spec(legacy, paths=tmp_paths)
+    assert result is None
+    rendered = " ".join(r.getMessage() for r in caplog.records)
+    assert f"'{legacy}'" in rendered
+    assert f"'{new}'" in rendered
+    assert f"--spec {new}" in rendered

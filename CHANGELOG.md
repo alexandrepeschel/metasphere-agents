@@ -4,6 +4,41 @@ All notable changes to Metasphere Agents will be documented here.
 
 ---
 
+## Unreleased
+
+### templates+specs full collapse
+
+`specs/<spec>/` has been folded into `templates/agents/<role>/`. Each
+role directory now owns the full persona stack — `SOUL.md`,
+`MISSION.md`, `AGENTS.md`, `config.md` — and the spec-to-role
+indirection is gone. Spec names and role names are now identical for
+the five shipped roles:
+
+- `implementer` → `eng`
+- `planner` → `lead`
+- `reviewer` → `critic`
+- `monitor` → `explorer`
+- `researcher` → `researcher` (unchanged)
+
+**Breaking change** for callers that hardcode the legacy names:
+`metasphere agent seed --spec implementer` (and the four siblings)
+now returns no spec. A warning logs the new name so shell aliases
+and scripts can be updated. The new invocation is `metasphere agent
+seed --spec eng @<agent>`.
+
+**Operator state preserved.** User-override specs at
+`~/.metasphere/specs/<custom>/` continue to resolve via a deprecated
+search tier. Move them to `~/.metasphere/templates/agents/<custom>/`
+at leisure.
+
+**Drift-check note.** Live agents seeded before this PR carry their
+old spec name in `~/.metasphere/agents/<id>/spec`. `metasphere update`
+drift-check returns `None` for one tick on those agents until the
+next `metasphere agent seed` rewrites the sidecar. Behaviour is
+otherwise unaffected.
+
+---
+
 ## 2026-05-29 to 2026-05-30 — per-project memory architecture shipped end-to-end + wake/discovery reliability fixes + audit-docs filter refinements
 
 Nineteen non-bump commits across 48h. Three coherent themes: (a) per-project memory + learnings architecture landed in eight feature PRs plus three docs/cleanup follow-ups, replacing the per-agent LEARNINGS/MEMORY pool with a shared per-project file pool; (b) two reliability fixes on the messages surface (cross-scope `msg read`, wake-banner truncation on long task bodies) plus a feature that auto-escalates undelivered high-priority wakes to session-respawn; (c) three small `audit-docs` filter refinements that cut self-referential and same-day false positives the operator was stripping by hand.

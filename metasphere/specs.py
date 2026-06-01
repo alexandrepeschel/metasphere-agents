@@ -1,13 +1,15 @@
 """Agent spec loading and persona seeding.
 
-Specs are directories in ``specs/`` (repo-level) or ``~/.metasphere/specs/``
-(user-level). Each spec directory contains markdown files that define the
-agent's persona:
+Specs are directories under ``templates/agents/<role>/`` in the repo,
+with an optional user override at ``~/.metasphere/templates/agents/``
+(canonical) or the legacy ``~/.metasphere/specs/`` (still searched
+for back-compat; deprecated). Each role directory holds:
 
-    specs/reviewer/
+    templates/agents/critic/
+      config.md     — metadata frontmatter (name, role, sandbox, triggers)
       SOUL.md       — personality, voice, operating rules
       MISSION.md    — default mission template (with {{variables}})
-      config.md     — metadata frontmatter (name, role, sandbox, triggers)
+      AGENTS.md     — runtime guidelines
 
 Seeding copies these files into ``~/.metasphere/agents/@name/`` with
 variable substitution, so the agent wakes with voice and purpose.
@@ -107,15 +109,25 @@ def _parse_frontmatter(text: str) -> dict:
 # ---------------------------------------------------------------------------
 
 def _spec_dirs(paths: Paths | None = None) -> list[Path]:
-    """Return directories to search for spec subdirectories."""
+    """Return directories to search for role subdirectories.
+
+    Search order, first-match-wins per role name:
+
+    1. ``~/.metasphere/templates/agents/`` — canonical user override
+    2. ``~/.metasphere/specs/`` — legacy user override (deprecated; kept
+       so existing operator customizations don't silently stop working)
+    3. ``$METASPHERE_PROJECT_ROOT/templates/agents/`` — repo-local
+    4. package-relative ``templates/agents/`` — shipped defaults
+    """
     paths = paths or resolve()
     dirs = []
     seen: set[str] = set()
 
     for candidate in [
-        paths.root / "specs",             # ~/.metasphere/specs/
-        paths.project_root / "specs",             # $METASPHERE_PROJECT_ROOT/specs/
-        Path(__file__).resolve().parent.parent / "specs",  # package-relative
+        paths.root / "templates" / "agents",
+        paths.root / "specs",  # deprecated, still honored
+        paths.project_root / "templates" / "agents",
+        Path(__file__).resolve().parent.parent / "templates" / "agents",
     ]:
         resolved = str(candidate.resolve())
         if candidate.is_dir() and resolved not in seen:
@@ -137,14 +149,35 @@ def list_specs(paths: Paths | None = None) -> list[AgentSpec]:
     return list(specs.values())
 
 
+_LEGACY_SPEC_RENAMES = {
+    "implementer": "eng",
+    "planner": "lead",
+    "reviewer": "critic",
+    "monitor": "explorer",
+}
+
+
 def get_spec(name: str, paths: Paths | None = None) -> Optional[AgentSpec]:
-    """Load a spec by name (searches all spec directories)."""
+    """Load a spec by name (searches all spec directories).
+
+    Emits a one-line logger hint when an operator passes a legacy spec
+    name that was renamed in the templates/agents/ collapse. The hint
+    helps shell aliases / scripts catch up without keeping the alias
+    map alive in resolution itself.
+    """
     for parent in _spec_dirs(paths):
         d = parent / name
         if d.is_dir():
             spec = AgentSpec.from_dir(d)
             if spec:
                 return spec
+    if name in _LEGACY_SPEC_RENAMES:
+        new_name = _LEGACY_SPEC_RENAMES[name]
+        logger.warning(
+            "Spec '%s' was renamed to '%s' in the templates/agents/ "
+            "collapse — retry with --spec %s.",
+            name, new_name, new_name,
+        )
     return None
 
 
@@ -175,35 +208,12 @@ def _now_iso() -> str:
     return _dt.datetime.now(_dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def _find_agents_md_template(role: str) -> Optional[Path]:
-    """Locate the shipped AGENTS.md template for ``role``.
-
-    Searches, in order:
-    1. Repo root inferred from this module's location (editable install).
-    2. ``$METASPHERE_PROJECT_ROOT`` if it differs and contains ``templates/``.
-
-    Returns ``None`` if no template exists for ``role``.
-    """
-    candidates = []
-    pkg_repo_root = Path(__file__).resolve().parent.parent
-    candidates.append(pkg_repo_root / "templates" / "agents" / role / "AGENTS.md")
-    try:
-        env_root = Path(resolve().project_root)
-        if env_root and env_root != pkg_repo_root:
-            candidates.append(env_root / "templates" / "agents" / role / "AGENTS.md")
-    except Exception:
-        pass
-    for candidate in candidates:
-        if candidate.is_file():
-            return candidate
-    return None
-
-
 def _find_user_md_template() -> Optional[Path]:
     """Locate the shipped USER.md template for project-level seeding.
 
-    Same search order as :func:`_find_agents_md_template`. Returns
-    ``None`` if no template ships.
+    Searches the package-relative ``templates/install/projects/`` dir
+    first, then ``$METASPHERE_PROJECT_ROOT/templates/install/projects/``
+    if it differs. Returns ``None`` if no template ships.
     """
     candidates = []
     pkg_repo_root = Path(__file__).resolve().parent.parent
@@ -347,16 +357,19 @@ def seed_agent(
             atomic_write_text(dest, content)
             logger.info("Seeded %s/%s from spec '%s'", agent_id, src.name, spec.name)
 
-    # --- AGENTS.md (runtime guidelines per role, from repo-shipped templates) ---
-    # Spec dirs (specs/) hold SOUL/MISSION (voice + role); shared
-    # runtime rules per role live separately at templates/agents/<role>/AGENTS.md
-    # so a single source can be evolved without forking each spec.
-    # Skips silently if no template exists for spec.role.
+    # --- AGENTS.md fallback (role-shared runtime guidelines) ---
+    # The persona-copy loop above already lands AGENTS.md when it's
+    # present alongside SOUL/MISSION in the spec dir (the canonical
+    # post-collapse layout). The fallback below catches the legacy
+    # case of a user override under ``~/.metasphere/specs/<custom>/``
+    # that ships SOUL/MISSION but not AGENTS.md — those still get the
+    # shared role contract from the shipped ``templates/agents/<role>/``.
     agents_md_dest = agent_dir / "AGENTS.md"
     if force or not agents_md_dest.is_file():
-        template_path = _find_agents_md_template(spec.role)
-        if template_path is not None:
-            content = _substitute(template_path.read_text(encoding="utf-8"), variables)
+        pkg_repo_root = Path(__file__).resolve().parent.parent
+        shared = pkg_repo_root / "templates" / "agents" / spec.role / "AGENTS.md"
+        if shared.is_file():
+            content = _substitute(shared.read_text(encoding="utf-8"), variables)
             atomic_write_text(agents_md_dest, content)
             logger.info("Seeded %s/AGENTS.md from templates/agents/%s/", agent_id, spec.role)
 
