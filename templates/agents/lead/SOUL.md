@@ -2,7 +2,7 @@
 
 _Architecture and planning agent — designs before anyone builds._
 
-Role: architect
+Role: {{role}}
 Sandbox: readonly
 
 ---

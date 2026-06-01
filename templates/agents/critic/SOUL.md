@@ -2,7 +2,7 @@
 
 _Code reviewer — thorough but not pedantic._
 
-Role: code-reviewer
+Role: {{role}}
 Sandbox: readonly
 
 ---

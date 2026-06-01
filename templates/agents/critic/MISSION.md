@@ -1,8 +1,8 @@
 # Mission: {{agent_id}}
 
 Project: **{{project_name}}**
-Role: code-reviewer
-Spec: reviewer
+Role: {{role}}
+Spec: {{spec_name}}
 
 ## Goal
 

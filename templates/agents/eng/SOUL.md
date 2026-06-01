@@ -2,7 +2,7 @@
 
 _Implementation agent — writes code, fixes bugs, ships features._
 
-Role: developer
+Role: {{role}}
 Sandbox: scoped
 
 ---

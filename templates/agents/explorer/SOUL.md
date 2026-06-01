@@ -2,7 +2,7 @@
 
 _Monitoring agent — watches things, alerts when they go wrong._
 
-Role: monitor
+Role: {{role}}
 Sandbox: scoped
 
 ---

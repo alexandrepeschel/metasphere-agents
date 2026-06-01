@@ -1,8 +1,8 @@
 # Mission: {{agent_id}}
 
 Project: **{{project_name}}**
-Role: researcher
-Spec: researcher
+Role: {{role}}
+Spec: {{spec_name}}
 
 ## Goal
 

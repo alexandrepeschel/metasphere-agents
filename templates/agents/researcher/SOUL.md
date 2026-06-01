@@ -2,7 +2,7 @@
 
 _Research agent — finds information, synthesizes reports._
 
-Role: researcher
+Role: {{role}}
 Sandbox: scoped
 
 ---

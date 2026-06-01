@@ -241,6 +241,65 @@ def test_seed_agent_rejects_invalid_names(tmp_paths, bad_name):
 
 # ---------- legacy spec-name resolution ----------
 
+# ---------- shipped-template metadata uses substitution, not literal names ----------
+
+# After PR #140 collapsed specs/ into templates/agents/<role>/, the
+# config.md ``name`` field was renamed (implementer->eng, planner->lead,
+# reviewer->critic, monitor->explorer) but each role's MISSION.md and
+# SOUL.md still carried the OLD ``Role: <old>`` / ``Spec: <old>`` literal
+# strings. Result: a fresh ``--spec eng`` seed would land MISSION.md
+# reading ``Role: developer / Spec: implementer`` — pointing at names
+# that no longer exist anywhere else in the codebase.
+#
+# Fix is to make the metadata reference template variables (``{{role}}``
+# and ``{{spec_name}}``) so a future rename only needs to touch config.md.
+# This test pins that contract: every shipped role's MISSION/SOUL uses
+# substitution, not hardcoded names.
+
+@pytest.mark.parametrize("role", ["eng", "lead", "critic", "explorer", "researcher"])
+def test_shipped_mission_uses_role_substitution(role):
+    pkg_root = Path(_specs.__file__).resolve().parent.parent
+    mission = pkg_root / "templates" / "agents" / role / "MISSION.md"
+    text = mission.read_text(encoding="utf-8")
+    assert "Role: {{role}}" in text, (
+        f"templates/agents/{role}/MISSION.md must use Role: {{{{role}}}} "
+        f"substitution so a future rename touches only config.md"
+    )
+    assert "Spec: {{spec_name}}" in text, (
+        f"templates/agents/{role}/MISSION.md must use Spec: {{{{spec_name}}}}"
+    )
+
+
+@pytest.mark.parametrize("role", ["eng", "lead", "critic", "explorer", "researcher"])
+def test_shipped_soul_uses_role_substitution(role):
+    pkg_root = Path(_specs.__file__).resolve().parent.parent
+    soul = pkg_root / "templates" / "agents" / role / "SOUL.md"
+    text = soul.read_text(encoding="utf-8")
+    assert "Role: {{role}}" in text, (
+        f"templates/agents/{role}/SOUL.md must use Role: {{{{role}}}} "
+        f"substitution so a future rename touches only config.md"
+    )
+
+
+@pytest.mark.parametrize("role", ["eng", "lead", "critic", "explorer", "researcher"])
+def test_seed_agent_renders_role_metadata_matching_config(tmp_paths, role):
+    """End-to-end: seeding from a shipped role template lands MISSION.md
+    with ``Role: <role>`` and ``Spec: <role>`` — never a stale legacy
+    name. Catches a re-introduction of the PR #140 collapse drift."""
+    pkg_root = Path(_specs.__file__).resolve().parent.parent
+    spec = _specs.get_spec(role, paths=tmp_paths)
+    assert spec is not None, f"shipped spec {role!r} should resolve via get_spec"
+    # Skip if shipped spec dir differs from package-relative path (no-op
+    # in CI; the get_spec lookup tier-walk handles this).
+    assert spec.spec_dir == pkg_root / "templates" / "agents" / role
+    agent_dir = _specs.seed_agent(f"@{role}-test", spec, paths=tmp_paths)
+    mission = (agent_dir / "MISSION.md").read_text(encoding="utf-8")
+    soul = (agent_dir / "SOUL.md").read_text(encoding="utf-8")
+    assert f"Role: {role}" in mission
+    assert f"Spec: {role}" in mission
+    assert f"Role: {role}" in soul
+
+
 @pytest.mark.parametrize(
     "legacy,new",
     [

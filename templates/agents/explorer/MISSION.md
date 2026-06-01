@@ -1,8 +1,8 @@
 # Mission: {{agent_id}}
 
 Project: **{{project_name}}**
-Role: monitor
-Spec: monitor
+Role: {{role}}
+Spec: {{spec_name}}
 
 ## Goal
 

@@ -1,8 +1,8 @@
 # Mission: {{agent_id}}
 
 Project: **{{project_name}}**
-Role: developer
-Spec: implementer
+Role: {{role}}
+Spec: {{spec_name}}
 
 ## Goal
 
