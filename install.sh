@@ -329,11 +329,9 @@ if not isinstance(data, dict):
     sys.exit(1)
 lines = ["# Migrated from legacy ~/.metasphere/config/telegram_contacts.json",
          "# at install time. Edit freely."]
-# Preserve the legacy 'julian' default-recipient convention for
-# hosts that had it. Stranger installs without a 'julian' entry get
-# no default-recipient written — operator must set it explicitly.
-if "julian" in data:
-    lines.append("default-recipient: julian")
+# No default-recipient is written here — the operator sets one
+# explicitly after install by adding `default-recipient: <name>`
+# at the top of this file.
 lines.append("contacts:")
 for name, chat_id in data.items():
     lines.append(f"  {name}:")

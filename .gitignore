@@ -21,6 +21,10 @@
 # Operator-local agent tooling lifted out of the public harness
 /brain/
 
+# Broadcast directives live under the installed instance
+# (~/.metasphere/DIRECTIVES.yaml), never in the harness repo.
+/DIRECTIVES.yaml
+
 # Python build/cache artifacts (metasphere/ Python port)
 __pycache__/
 *.pyc

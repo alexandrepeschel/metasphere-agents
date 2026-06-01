@@ -105,7 +105,8 @@ def _respawn_cmd(
         # scheduled tasks bounce off its button layout instead of
         # reaching the prompt, leading to stuck-paste accumulation
         # (2026-04-16 research-monitor outage). Scoped to agent REPLs
-        # only — Julian's interactive claude sessions are unaffected.
+        # only — the operator's interactive claude sessions are
+        # unaffected.
         # Setting ``CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1`` is the
         # superset that also kills any telemetry emitted via Dismiss
         # (per upstream: even pressing 0 may transmit session data).

@@ -121,8 +121,8 @@ def count_user_messages(transcript_path: Path | str | None) -> int:
     turns; (3) was the cause of the recurring suppressions seen on
     @orchestrator across 2026-05 — every first-turn-after-compaction
     silently dropped from Telegram; (4) was observed for the heartbeat
-    sentinel on 2026-05-18 (count-mismatch on Julian's "active vs idle"
-    reply). The wake-up and agent-wake sentinels share the exact same
+    sentinel on 2026-05-18 (count-mismatch on an operator reply). The
+    wake-up and agent-wake sentinels share the exact same
     inject shape, so they are filtered preemptively.
 
     Returns 0 when the transcript is missing, empty, unreadable, or has

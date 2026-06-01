@@ -788,7 +788,7 @@ def test_write_harness_hash_baseline_matches_reader_hash(tmp_paths):
 # 2026-04-16: Claude TUI's feedback modal ("How is Claude doing this
 # session? 1: Bad 2: Fine 3: Good 0: Dismiss") captures input and
 # causes stuck-paste accumulation. Disable at the env level for every
-# metasphere-spawned agent REPL. Julian's own interactive claude
+# metasphere-spawned agent REPL. The operator's own interactive claude
 # sessions are NOT affected (this only touches agent-REPL respawn +
 # agent-spawn env paths).
 # ---------------------------------------------------------------------------

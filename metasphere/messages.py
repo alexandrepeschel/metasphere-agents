@@ -558,8 +558,9 @@ def send_message(
     # Escalate to session-respawn for high-priority labels when the
     # best-effort tmux inject above didn't actually land. Without this,
     # a !task to a dormant recipient sits unread until the next idle
-    # heartbeat tick — see msg-1780086179 (writing-lead's !task stuck
-    # 7h before Julian asked for the drafts). wake_persistent injects
+    # heartbeat tick (see msg-1780086179 incident: a !task sat 7h
+    # unread on a nominally-alive but unresponsive recipient before
+    # the operator noticed). wake_persistent injects
     # into a live session OR cold-starts a fresh one; B1's truncation-
     # safe bootstrap-pointer handles long bodies automatically.
     if (

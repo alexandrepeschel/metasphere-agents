@@ -34,7 +34,7 @@ def test_list_groups_global_first_then_projects(tmp_paths: Paths, capsys, monkey
 
     # Two global agents
     _make_agent(tmp_paths.agents / "@orchestrator")
-    _make_agent(tmp_paths.agents / "@julian")
+    _make_agent(tmp_paths.agents / "@alice")
     # Two project-scoped agents under distinct projects
     _make_agent(tmp_paths.project_agents_dir("worldwire") / "@worldwire-eng")
     _make_agent(tmp_paths.project_agents_dir("worldwire") / "@worldwire-lead")
@@ -61,7 +61,7 @@ def test_list_groups_global_first_then_projects(tmp_paths: Paths, capsys, monkey
     )
 
     # Each agent prints with 4-space indent + dormant marker
-    assert "    ○ @julian" in lines
+    assert "    ○ @alice" in lines
     assert "    ○ @orchestrator" in lines
     assert "    ○ @recurse-eng" in lines
     assert "    ○ @worldwire-eng" in lines

@@ -170,7 +170,7 @@ def test_is_auto_version_bump_recognizes_bot_shape():
 def test_run_audit_filters_auto_version_bumps(tmp_path, tmp_paths):
     """Auto-version-bump commits from the bump-minor workflow recycle
     every cycle as Chores noise — they have to be filtered before
-    classification, otherwise Julian strips them by hand on every
+    classification, otherwise they get stripped by hand on every
     CHANGELOG promotion (and the audit report dilutes 7-of-10 with
     bumps, as seen on the 2026-05-29 audit).
     """

@@ -2,11 +2,11 @@
 project capsule.
 
 B5 (c21e1a7) shipped relevance-rank entry selection from inbox +
-MISSION query signal. Julian's 2026-05-29 23:48Z design directive
-(orch msg-1780098877) replaces that with recency-sort + always-on
-file-path pointer footer: ranking by query was over-engineered, wake
-banner timing made it unreliable, and recency is predictable. Agents
-who need older content can grep the file via the footer pointer.
+MISSION query signal. The 2026-05-29 design directive replaces that
+with recency-sort + always-on file-path pointer footer: ranking by
+query was over-engineered, wake banner timing made it unreliable,
+and recency is predictable. Agents who need older content can grep
+the file via the footer pointer.
 
 This test file replaces ``test_context_project_capsule_relevance.py``
 (which exercised the deleted B5 surface). Markdown-entry parsing is

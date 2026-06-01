@@ -8,10 +8,10 @@ falls back to ``_infer_project_for_agent``: path layout first
 Frontmatter remains the explicit override. Inference is single-project;
 multi-project still requires ``projects: [a, b]`` in frontmatter.
 
-Trigger: @worldwire-eng's MISSION.md had no ``project:`` key, so the
-T1 capsule no-op'd and the agent couldn't see its project's LEARNINGS.
-Julian directive 2026-05-29 22:32Z (msg-1780093638): don't require
-frontmatter; infer from layout.
+Trigger: an existing agent's MISSION.md had no ``project:`` key, so
+the T1 capsule no-op'd and the agent couldn't see its project's
+LEARNINGS. Operator directive 2026-05-29: don't require frontmatter;
+infer from layout.
 """
 
 from __future__ import annotations

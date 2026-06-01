@@ -293,14 +293,14 @@ def test_strip_trailing_idle_removes_trailer_keeps_prose():
     removed. This is the load-bearing behaviour: legit non-idle text
     DOES reach Telegram, the trailer DOES NOT."""
     text = (
-        "ww-lead acknowledged + dispatched eng with compound audit. "
-        "ETA 2-4h. No fork for Julian — informational pass-through."
+        "lead acknowledged + dispatched eng with compound audit. "
+        "ETA 2-4h. No fork for the operator — informational pass-through."
         "\n\n[idle]"
     )
     cleaned = posthook._strip_trailing_idle(text)
     assert cleaned == (
-        "ww-lead acknowledged + dispatched eng with compound audit. "
-        "ETA 2-4h. No fork for Julian — informational pass-through."
+        "lead acknowledged + dispatched eng with compound audit. "
+        "ETA 2-4h. No fork for the operator — informational pass-through."
     )
 
 
@@ -365,14 +365,14 @@ def test_route_to_telegram_sends_once_and_dedupes(tmp_paths: Paths):
 
 
 def test_route_to_telegram_strips_trailing_idle_before_sending(tmp_paths: Paths):
-    """Real-world repro from @orchestrator's transcript 2026-05-05:
+    """Real-world repro from an orchestrator transcript 2026-05-05:
     substantive prose followed by ``\\n\\n[idle]``. The send must go
     through with the substantive prose, but the trailing ``[idle]``
-    must be stripped — not forwarded to Julian's Telegram."""
+    must be stripped — not forwarded to the operator's Telegram."""
     _write_chat_id(tmp_paths)
     payload = (
-        "ww-lead acknowledged + dispatched eng with compound audit. "
-        "ETA 2-4h. No fork for Julian.\n\n[idle]"
+        "lead acknowledged + dispatched eng with compound audit. "
+        "ETA 2-4h. No fork for the operator.\n\n[idle]"
     )
     with mock.patch("metasphere.telegram.api.send_message") as m:
         m.return_value = [{"ok": True}]
@@ -383,8 +383,8 @@ def test_route_to_telegram_strips_trailing_idle_before_sending(tmp_paths: Paths)
         f"trailing [idle] must not reach Telegram; got: {sent!r}"
     )
     assert sent == (
-        "ww-lead acknowledged + dispatched eng with compound audit. "
-        "ETA 2-4h. No fork for Julian."
+        "lead acknowledged + dispatched eng with compound audit. "
+        "ETA 2-4h. No fork for the operator."
     )
 
 

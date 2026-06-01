@@ -463,8 +463,7 @@ def _render_project_capsule(paths: Paths, agent: str) -> str:
        MISSION.md exists.
     2. **teams.yaml** — central agent→projects roster at
        ``~/.metasphere/teams.yaml``. Supports multi-project natively.
-       Canonical replacement for B4's name-prefix string match
-       (Julian directive 2026-05-29 23:48Z — msg-1780098877).
+       Canonical replacement for B4's name-prefix string match.
     3. **Path-nested inference** — agent home at
        ``~/.metasphere/projects/<P>/agents/@<id>/`` → ``<P>``.
        Last-resort fallback for project-nested agents not yet in

@@ -5,8 +5,8 @@ malformed YAML, wrong schema, missing keys) so the project-capsule
 resolution chain falls through to path-nested inference rather than
 crashing the per-turn context build.
 
-Julian directive 2026-05-29 23:48Z (orch msg-1780098877): replace
-B4's name-prefix string-match inference with a config-driven roster.
+Operator directive 2026-05-29: replace B4's name-prefix string-match
+inference with a config-driven roster.
 """
 
 from __future__ import annotations

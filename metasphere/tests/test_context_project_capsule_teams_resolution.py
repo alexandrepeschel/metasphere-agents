@@ -9,8 +9,6 @@ Precedence (highest first):
 
 B4's name-prefix string-match inference was deleted in B7 — these
 tests pin the brittleness fix in place.
-
-Julian directive 2026-05-29 23:48Z (orch msg-1780098877).
 """
 
 from __future__ import annotations
@@ -81,9 +79,9 @@ def _seed_project_file(
 
 
 def test_resolution_teams_yaml_brittleness_fix(tmp_paths: Paths):
-    """Julian's canonical case: ``@spot`` doesn't follow
-    ``<project>-<role>`` convention. teams.yaml resolves it where
-    name-prefix inference cannot."""
+    """Canonical case: ``@spot`` doesn't follow ``<project>-<role>``
+    convention. teams.yaml resolves it where name-prefix inference
+    cannot."""
     _seed_project_file(
         tmp_paths, "worldwire", learnings="hetzner anchor body",
     )
