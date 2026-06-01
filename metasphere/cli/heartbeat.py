@@ -1,4 +1,12 @@
-"""CLI for the heartbeat daemon."""
+"""``metasphere heartbeat`` — per-tick heartbeat entrypoint.
+
+Two modes back the same code path: a one-shot invocation (cron / hook
+caller wants a single tick) and a long-running daemon loop run under
+systemd. The tick body lives in ``metasphere.heartbeat`` and injects a
+short status nudge into each alive agent tmux session so idle REPLs
+get a wake signal at a predictable cadence. Cadence + which agents are
+in scope are decided by the heartbeat module, not by this shim.
+"""
 
 from __future__ import annotations
 

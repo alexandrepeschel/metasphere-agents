@@ -1,4 +1,12 @@
-"""CLI shim for the task management module."""
+"""``metasphere task`` — task lifecycle CLI shim.
+
+Front-end onto ``metasphere.tasks``: create, list, update status, and
+complete tasks scoped to a project or to ``/``. Tasks are the
+medium-lived work-units between fire-and-forget messages and
+multi-day project artifacts; the consolidate sweep escalates or
+archives them based on age + status. State writes flow through the
+tasks module; this shim only parses argv and renders.
+"""
 
 from __future__ import annotations
 

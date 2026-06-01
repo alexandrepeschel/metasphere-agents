@@ -1,4 +1,12 @@
-"""CLI for the trace subsystem."""
+"""``metasphere trace`` — command-trace capture + query CLI.
+
+Front-end to ``metasphere.trace``: capture a wrapped command's argv +
+exit status, list previously captured traces, search by free-text, and
+prune old entries. Traces are how the harness builds up a history of
+operator-invoked shell commands that downstream agents (and the
+posthook flow) can replay or grep against. This module is the only
+write path for the trace store.
+"""
 
 from __future__ import annotations
 

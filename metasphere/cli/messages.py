@@ -1,4 +1,14 @@
-"""CLI shim for the messaging module."""
+"""``metasphere msg`` — cross-agent message bus CLI.
+
+Operator-facing surface over ``metasphere.messages``: send/reply/done,
+list inbox for a scope, render the reply graph. Messages are
+persisted as per-agent files with a strict label vocabulary
+(``!task``/``!info``/``!query``/``!reply``/``!done``/``!urgent``)
+that the consolidate sweep keys off when deciding lifetime. Wake
+behaviour is driven by message-label + recipient state, not by this
+shim — sending a ``!task`` to a dormant agent does not implicitly
+wake it.
+"""
 
 from __future__ import annotations
 

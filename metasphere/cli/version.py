@@ -1,4 +1,12 @@
-"""``metasphere version`` — print version + HEAD commit hash."""
+"""``metasphere version`` — print installed version + HEAD commit.
+
+Reads the package version from the installed ``pyproject.toml`` and
+the current HEAD short-hash via ``git rev-parse``. Used by the update
+flow to confirm a self-upgrade actually landed and by the daily
+briefing to anchor "what's running right now". Best-effort on the
+git side — falls back to the packaged version alone outside a git
+worktree.
+"""
 
 from __future__ import annotations
 

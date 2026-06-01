@@ -1,4 +1,12 @@
-"""``metasphere logs`` — tail metasphere service logs."""
+"""``metasphere logs`` — tail metasphere service logs.
+
+Single-pane log tailer that resolves service-name aliases (``gateway``,
+``heartbeat``, ``schedule``, ``reaper``, ``posthook``, ``update``,
+``events``) onto the underlying log file paths via
+``metasphere.paths``. Supports ``--lines N`` and ``-f`` follow mode;
+multi-file follow is interleaved by file mtime. Read-only — never
+rotates or truncates the files it reads.
+"""
 
 from __future__ import annotations
 

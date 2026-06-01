@@ -1,4 +1,12 @@
-"""CLI: ``metasphere restart`` — wholesale daemon + agent restart."""
+"""``metasphere restart`` — wholesale daemon + agent restart.
+
+Operator-facing recovery hammer: restarts the three daemons (gateway,
+heartbeat, schedule) and every alive agent tmux session, in an order
+that avoids cascade-killing live REPLs before their daemons are back
+up. Also accepts a single-agent target for narrow restarts. Treat as
+the last resort before manual triage — the gateway restart in
+particular cascade-reaps every dependent agent tmux.
+"""
 
 from __future__ import annotations
 

@@ -1,4 +1,12 @@
-"""System status summary."""
+"""System status summary — single-screen liveness snapshot.
+
+Backs ``metasphere status``: composes a short human-readable report of
+the currently alive tmux sessions and basic install layout. Reads
+only — pulls live session state from ``metasphere.session.list_sessions``
+and path layout from ``metasphere.paths.resolve``, no on-disk writes.
+Designed to be cheap enough to invoke on every ``watch`` tick and from
+the top of operator-facing briefings.
+"""
 
 from __future__ import annotations
 

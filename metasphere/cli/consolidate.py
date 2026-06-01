@@ -1,4 +1,12 @@
-"""``metasphere consolidate`` CLI."""
+"""``metasphere consolidate`` — sweep stale tasks and messages.
+
+Thin shim over ``metasphere.consolidate``; one invocation per
+heartbeat-style sweep. Classifies active tasks and unread messages into
+buckets (stale / unowned / info-auto-archive / escalate) and applies
+the resulting transitions, emitting one ``task.consolidate`` /
+``message.consolidate`` event per action. Designed to be cron-driven —
+behaviour is idempotent across reruns within a tick window.
+"""
 
 from __future__ import annotations
 

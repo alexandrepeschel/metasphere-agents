@@ -1,4 +1,12 @@
-"""``metasphere docs`` — regenerate ``docs/CLI.md`` from the registry."""
+"""``metasphere docs`` — regenerate ``docs/CLI.md`` from the registry.
+
+Walks ``metasphere.cli._registry.SUBCOMMANDS`` and reads each handler
+module's ``DESCRIPTION`` + ``USAGE`` constants without ever calling the
+handler. Emits a single Markdown document that mirrors the top-level
+``metasphere --help`` output, so the published docs stay in lockstep
+with whatever the registry currently routes. Run as a developer task,
+not part of the runtime path.
+"""
 
 from __future__ import annotations
 

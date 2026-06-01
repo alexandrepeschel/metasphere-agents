@@ -1,4 +1,12 @@
-"""``metasphere config telegram`` — bootstrap Telegram bot connectivity."""
+"""``metasphere config`` — first-run bootstrap for harness credentials.
+
+Interactive (or flag-driven) wizard that wires the Telegram bot token
+and chat id used by the gateway and posthook. Validates the token via a
+``getMe`` round-trip and, when interactive, polls Telegram for recent
+inbound messages so a chat id can be picked without copy-paste from the
+Bot API. Writes results into the active config file resolved by
+``metasphere.paths`` — no other module mutates that on first run.
+"""
 
 from __future__ import annotations
 
