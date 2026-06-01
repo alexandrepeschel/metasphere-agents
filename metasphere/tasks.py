@@ -242,9 +242,23 @@ def create_task(
     ``$METASPHERE_AGENT_ID`` (the resolving agent). Tasks should always
     have both; callers that can't determine an owner should explicitly
     pass ``"@unassigned"``.
+
+    Explicit ``created_by``, ``project``, and ``assigned_to`` values
+    are validated for flag-shape leak (``--bogus``-class typos). This
+    is the same guard the CLI already applies at ``_cmd_new``; lifting
+    it into ``create_task`` itself catches API-level callers like
+    ``spawn_ephemeral`` (agents.py:495 passes ``created_by=parent``)
+    that bypass the CLI argv parser. Prevents fossils like the
+    ``id=task, created_by=--bogus`` task surfaced on 2026-06-01.
     """
     if priority not in VALID_PRIORITIES:
         raise ValueError(f"invalid priority {priority!r}; want one of {VALID_PRIORITIES}")
+    if created_by is not None:
+        _validate_created_by(created_by)
+    if project is not None:
+        _validate_project_name(project)
+    if assigned_to is not None:
+        _validate_assignee(assigned_to)
 
     scope = Path(scope)
     project_root = Path(project_root)
@@ -283,6 +297,27 @@ def create_task(
     )
     atomic_write_text(path, task.to_text())
     return task
+
+
+def _validate_created_by(creator: str) -> None:
+    """Reject empty or flag-shaped ``created_by`` values before frontmatter.
+
+    Same argv-leak class as ``_validate_assignee``: a spawn call with
+    ``parent="--bogus"`` (the parent kw becomes ``created_by`` at
+    ``agents.spawn_ephemeral``) would otherwise persist
+    ``created_by: --bogus`` in the task file. Pre-existing fossil
+    surfaced 2026-06-01 by @explorer (ping_count=1098 over 13 days).
+    """
+    if not isinstance(creator, str) or not creator.strip():
+        raise ValueError("created_by must be a non-empty string")
+    bare = creator[1:] if creator.startswith("@") else creator
+    if not bare:
+        raise ValueError("created_by must be non-empty after optional '@'")
+    if bare.startswith("-"):
+        raise ValueError(
+            f"created_by looks like a CLI flag: {creator!r} "
+            f"(must not start with '-' after optional '@')"
+        )
 
 
 def _validate_assignee(agent: str) -> None:

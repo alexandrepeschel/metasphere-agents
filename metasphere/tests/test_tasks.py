@@ -412,6 +412,59 @@ def test_assign_task_rejects_flag_shaped_agent(tmp_paths, monkeypatch, bad_agent
     assert loaded.assignee != "@-x"
 
 
+@pytest.mark.parametrize(
+    "bad_creator",
+    ["--bogus", "@--bogus", "-x", "@-x", "", "   "],
+)
+def test_create_task_rejects_flag_shaped_created_by(
+    tmp_paths, monkeypatch, bad_creator
+):
+    """API-level guard at the creation boundary: spawn_ephemeral
+    (agents.py:495) forwards ``parent`` as ``created_by``; a flag-shaped
+    parent like ``--bogus`` would otherwise persist
+    ``created_by: --bogus`` in frontmatter and ping the lifecycle
+    forever. Reproduced by the fossil at
+    metasphere-agents/.tasks/active/task.md (ping_count=1098)."""
+    monkeypatch.setenv("METASPHERE_AGENT_ID", "@owner")
+    with pytest.raises(ValueError):
+        t.create_task(
+            "a", "!normal", tmp_paths.scope, tmp_paths.project_root,
+            created_by=bad_creator,
+        )
+    active = tmp_paths.scope / ".tasks" / "active"
+    assert not active.exists() or not list(active.glob("*.md"))
+
+
+@pytest.mark.parametrize("bad_assignee", ["--bogus", "@--bogus", "-x", "@-x", "", "   "])
+def test_create_task_rejects_flag_shaped_assigned_to(
+    tmp_paths, monkeypatch, bad_assignee
+):
+    """API-level guard mirroring CLI's ``--assign`` rejection."""
+    monkeypatch.setenv("METASPHERE_AGENT_ID", "@owner")
+    with pytest.raises(ValueError):
+        t.create_task(
+            "a", "!normal", tmp_paths.scope, tmp_paths.project_root,
+            assigned_to=bad_assignee,
+        )
+    active = tmp_paths.scope / ".tasks" / "active"
+    assert not active.exists() or not list(active.glob("*.md"))
+
+
+@pytest.mark.parametrize("bad_project", ["--bogus", "-x", "", "   "])
+def test_create_task_rejects_flag_shaped_project(
+    tmp_paths, monkeypatch, bad_project
+):
+    """API-level guard mirroring CLI's ``--project`` rejection."""
+    monkeypatch.setenv("METASPHERE_AGENT_ID", "@owner")
+    with pytest.raises(ValueError):
+        t.create_task(
+            "a", "!normal", tmp_paths.scope, tmp_paths.project_root,
+            project=bad_project,
+        )
+    active = tmp_paths.scope / ".tasks" / "active"
+    assert not active.exists() or not list(active.glob("*.md"))
+
+
 @pytest.mark.parametrize("bad_project", ["--bogus", "-x", "", "   "])
 def test_move_task_rejects_flag_shaped_project(tmp_paths, monkeypatch, bad_project):
     """Library-level guard: ``move_task_project("foo", "--bogus")`` would

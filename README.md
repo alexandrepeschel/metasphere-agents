@@ -363,4 +363,4 @@ background on the license shape.
 
 ## Contributing
 
-See `CHANGELOG.md` for recent changes, `docs/CLI.md` for the full CLI reference, and `CLAUDE.md` for the operational instructions that guide the agent.
+See `CHANGELOG.md` for recent changes, `docs/CLI.md` for the full CLI reference, and `docs/MAINTAINER.md` for the contributor guide to this repo.

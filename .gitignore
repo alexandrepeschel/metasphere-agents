@@ -18,6 +18,9 @@
 # (these belong as siblings under ~/projects/ but live here for now)
 /vice-party/
 
+# Operator-local agent tooling lifted out of the public harness
+/brain/
+
 # Python build/cache artifacts (metasphere/ Python port)
 __pycache__/
 *.pyc
