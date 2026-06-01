@@ -4,8 +4,12 @@
 # One-line installer: curl -fsSL https://raw.githubusercontent.com/julianfleck/metasphere-agents/main/install.sh | bash
 #
 # Options:
-#   -y    Non-interactive mode (use defaults/env vars)
-#   -v    Verbose output
+#   -y                     Non-interactive mode (use defaults/env vars)
+#   -v                     Verbose output
+#   --no-migrate-<name>    Skip the matching subdir under migrate/.
+#                          E.g. --no-migrate-openclaw to skip the
+#                          OpenClaw precursor import even when it's
+#                          detected on disk. See migrate/README.md.
 #
 # Environment variables (for non-interactive):
 #   TELEGRAM_BOT_TOKEN    - Telegram bot token
@@ -19,14 +23,27 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" 2>/dev/null && pwd || echo ".")"
 INTERACTIVE=true
 VERBOSE=false
 
-# Parse arguments
-while getopts "yv" opt; do
-    case $opt in
-        y) INTERACTIVE=false ;;
-        v) VERBOSE=true ;;
-        *) ;;
+# Parse arguments — manual loop so we can mix short flags (-y, -v) and
+# the generic ``--no-migrate-<name>`` family (one flag per migration
+# subdir under ``migrate/``). Each ``--no-migrate-<name>`` sets the
+# env var ``MIGRATE_<NAME_UPPERCASED>=false``, which run_migrations()
+# checks before invoking the corresponding migrate script.
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        -y) INTERACTIVE=false; shift ;;
+        -v) VERBOSE=true; shift ;;
+        --no-migrate-*)
+            _name="${1#--no-migrate-}"
+            _upper=$(printf '%s' "$_name" | tr '[:lower:]-' '[:upper:]_')
+            printf -v "MIGRATE_${_upper}" '%s' "false"
+            export "MIGRATE_${_upper}"
+            shift
+            ;;
+        --) shift; break ;;
+        *) shift ;;
     esac
 done
+unset _name _upper
 
 # Detect if stdin is terminal
 [[ ! -t 0 ]] && INTERACTIVE=false
@@ -528,6 +545,77 @@ setup_path() {
 
     # Also export for current session
     export PATH="$BIN_DIR:$PATH"
+}
+
+# =============================================================================
+# Generic migrations dispatcher
+# =============================================================================
+#
+# Walks ``$SCRIPT_DIR/migrate/*/``. Each subdir is a self-contained
+# migration source with two executables:
+#
+#   detect.sh   — exit 0 if the source is present on this host.
+#   migrate.sh  — perform the import. Inherits METASPHERE_DIR,
+#                 INTERACTIVE, VERBOSE from this script.
+#
+# Detection is silent. On a hit, prompt ``Migrate from <name>? [Y/n]``
+# in interactive mode (default Yes); proceed by default in -y mode.
+# Pass ``--no-migrate-<name>`` to skip a specific source regardless of
+# detection (the arg parser at the top sets MIGRATE_<NAME>=false).
+#
+# Adding a migration: drop a sibling subdir under migrate/. See
+# migrate/README.md for the contract.
+
+run_migrations() {
+    local migrate_dir="$SCRIPT_DIR/migrate"
+    [[ -d "$migrate_dir" ]] || return 0
+
+    local source_dir source_name detect migrate skip_var
+    shopt -s nullglob
+    for source_dir in "$migrate_dir"/*/; do
+        source_name=$(basename "$source_dir")
+        detect="${source_dir}detect.sh"
+        migrate="${source_dir}migrate.sh"
+
+        # Both scripts must exist + be executable for the dispatcher
+        # to consider this a valid migration source.
+        [[ -x "$detect" && -x "$migrate" ]] || continue
+
+        # --no-migrate-<name> short-circuit, regardless of detection.
+        skip_var="MIGRATE_$(printf '%s' "$source_name" | tr '[:lower:]-' '[:upper:]_')"
+        if [[ "${!skip_var:-true}" == "false" ]]; then
+            continue
+        fi
+
+        # Run detection in a subshell so its env / set -e flags don't
+        # bleed into install.sh. Stdout/stderr suppressed by contract.
+        if ! ( bash "$detect" ) >/dev/null 2>&1; then
+            continue
+        fi
+
+        echo
+        info "Migration source detected: $source_name"
+        local do_migrate=true
+        if $INTERACTIVE; then
+            read -p "Migrate from $source_name? [Y/n] " -n 1 -r
+            echo
+            [[ $REPLY =~ ^[Nn]$ ]] && do_migrate=false
+        fi
+
+        if $do_migrate; then
+            if METASPHERE_DIR="$METASPHERE_DIR" \
+                    INTERACTIVE="$INTERACTIVE" \
+                    VERBOSE="$VERBOSE" \
+                    bash "$migrate"; then
+                ok "Migration from $source_name complete"
+            else
+                warn "Migration from $source_name failed (continuing)"
+            fi
+        else
+            info "Skipped $source_name migration"
+        fi
+    done
+    shopt -u nullglob
 }
 
 # =============================================================================
@@ -1255,6 +1343,12 @@ main() {
     check_dependencies
     setup_directories
     install_scripts
+    # Run migrations BEFORE telegram/CAM setup so an imported source
+    # (e.g. an existing Telegram token) is in place when those steps
+    # check for it. Migrations are silent no-ops when no source is
+    # detected — the dispatcher iterates migrate/*/ and only acts on
+    # subdirs whose detect.sh returns 0.
+    run_migrations
     install_cam           # Ensure cam binary is available
     migrate_cam_data      # Reuse existing ~/.cam to skip re-index
     setup_telegram

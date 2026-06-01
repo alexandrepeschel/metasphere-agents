@@ -52,6 +52,15 @@ cd metasphere-agents
 ./install.sh
 ```
 
+`install.sh` supports:
+
+- `-y` — non-interactive mode (accept defaults / env vars).
+- `-v` — verbose output.
+- `--no-migrate-<name>` — skip a migration source even when detected
+  on disk. One flag per subdir under [`migrate/`](migrate/) — e.g.
+  `--no-migrate-openclaw` skips the OpenClaw precursor import. See
+  [`migrate/README.md`](migrate/README.md) for how to add your own.
+
 ## Quick Start
 
 ```bash
