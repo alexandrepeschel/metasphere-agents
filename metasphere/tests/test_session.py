@@ -1,3 +1,11 @@
+"""Tests for ``metasphere.session`` — tmux session resolution.
+
+Covers ``list_sessions`` filtering on the ``metasphere-`` prefix,
+``resolve_session`` for project-scoped + orchestrator + bare-name
+lookups, and the ``attach`` fallback when the requested session is
+missing.
+"""
+
 from unittest.mock import patch
 
 from metasphere import session as sessmod

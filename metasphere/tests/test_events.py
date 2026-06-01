@@ -1,3 +1,10 @@
+"""Tests for ``metasphere.events`` — the append-only events log.
+
+Covers the JSONL record schema, ``log_event`` field defaults, the
+``tail_events`` reader, and concurrent-write safety (multiple processes
+appending to the same daily log without torn lines).
+"""
+
 import json
 import multiprocessing as mp
 import re

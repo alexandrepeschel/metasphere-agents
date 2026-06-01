@@ -1,3 +1,11 @@
+"""Tests for ``metasphere.git_hooks`` — install/uninstall + per-event handlers.
+
+Exercises the installer against a real ``git init`` repo in ``tmp_path``:
+shim file creation, idempotent re-install, ``hooks_status`` reporting,
+and the per-event handler bodies (``handle_pre_commit``,
+``handle_post_commit``).
+"""
+
 import subprocess
 from pathlib import Path
 

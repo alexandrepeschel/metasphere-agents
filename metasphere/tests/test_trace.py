@@ -1,3 +1,11 @@
+"""Tests for ``metasphere.trace`` — command-trace capture + query.
+
+Covers ``capture_trace`` for both list-argv and shell-string forms,
+error detection (non-zero exit + stderr pattern), the index roundtrip
+via ``list_traces`` + ``search_traces``, and ``prune_traces`` retention
+on date-stamped directories.
+"""
+
 import json
 from pathlib import Path
 

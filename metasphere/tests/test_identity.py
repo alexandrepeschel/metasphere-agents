@@ -1,3 +1,10 @@
+"""Tests for ``metasphere.identity.resolve_agent_id``.
+
+Locks the resolution-order chain: ``METASPHERE_AGENT_ID`` env wins, then
+the pointer file at ``paths.current_agent_file``, then a present
+``@orchestrator`` agent dir, finally a ``@user`` fallback.
+"""
+
 from metasphere.identity import resolve_agent_id
 
 

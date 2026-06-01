@@ -1,3 +1,11 @@
+"""Tests for ``metasphere.telegram.groups`` — forum topic management.
+
+Covers ``create_topic`` against a configured forum id, ``list_topics``
+persistence, and the topic-id mapping the gateway uses to route project
+messages onto the right thread. Telegram API calls are mocked at
+``tg_api.call``; no live network.
+"""
+
 from unittest.mock import patch
 
 import pytest

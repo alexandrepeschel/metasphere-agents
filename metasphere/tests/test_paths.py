@@ -1,3 +1,10 @@
+"""Tests for ``metasphere.paths`` — directory layout resolver.
+
+Covers ``resolve()`` env-var precedence and the per-subsystem path
+accessors (events log with daily rotation, agents dir, projects dir,
+config dir, state dir).
+"""
+
 import re
 
 from metasphere import paths as P

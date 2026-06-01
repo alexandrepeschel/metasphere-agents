@@ -1,3 +1,11 @@
+"""Tests for ``metasphere.config`` — env-file parsing and config loader.
+
+Covers ``parse_env_file`` (shell-style ``KEY=value`` with ``export`` and
+quote handling), ``load_config`` precedence across the per-config-dir
+``*.env`` files, and the ``load_env_to_environ`` shim that lifts loaded
+values into ``os.environ`` for downstream subprocesses.
+"""
+
 import os
 
 from metasphere.config import load_config, load_env_to_environ, parse_env_file

@@ -1,3 +1,12 @@
+"""Tests for ``metasphere.project`` — foundational project API.
+
+Layer-A coverage: ``init_project`` idempotency + marker creation,
+``list_projects`` registration, ``_validate_name`` rules, changelog +
+learnings file generation, and the ``project.json`` seed flow.
+Sibling layers (members, schema, telegram, context, lifecycle) live in
+their own ``test_project_*`` files.
+"""
+
 from pathlib import Path
 
 import pytest

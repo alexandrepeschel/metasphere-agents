@@ -364,3 +364,42 @@ def test_trace_capture_and_search(tmp_path, monkeypatch):
 
     hits = TR.search_traces(f"hello-{nonce}", paths=paths)
     assert any(h.id == tr.id for h in hits), f"trace {tr.id} not found via search"
+
+
+# ---------------------------------------------------------------------------
+# 11. Cross-module event ordering: tasks + messages share one event log
+# ---------------------------------------------------------------------------
+
+def test_cross_module_task_message_event(tmp_path, monkeypatch):
+    """task.create + message.send both append to the same events log in
+    invocation order. Unit-level tests cover each call in isolation; this
+    is the only place the cross-module ordering invariant is asserted."""
+    paths = _make_paths(tmp_path)
+    monkeypatch.setenv("METASPHERE_DIR", str(paths.root))
+    monkeypatch.setenv("METASPHERE_PROJECT_ROOT", str(paths.project_root))
+    monkeypatch.setenv("METASPHERE_SCOPE", str(paths.scope))
+
+    task = T.create_task(
+        "Cross module test task", "!normal", paths.project_root, paths.project_root
+    )
+    E.log_event(
+        "task.create", f"created {task.id}", agent="@a",
+        meta={"task_id": task.id}, paths=paths,
+    )
+
+    M.send_message(
+        target="@/",
+        label="!done",
+        body=f"done with {task.id}",
+        from_agent="@a",
+        paths=paths,
+        wake=False,
+    )
+
+    log = paths.events_log
+    assert log.exists(), f"expected events log at {log}"
+    records = [json.loads(l) for l in log.read_text().splitlines() if l.strip()]
+    types = [r["type"] for r in records]
+    assert "task.create" in types
+    assert "message.send" in types
+    assert types.index("task.create") < types.index("message.send")

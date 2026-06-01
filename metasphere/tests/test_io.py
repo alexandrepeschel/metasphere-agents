@@ -1,3 +1,10 @@
+"""Tests for ``metasphere.io`` — atomic writes + file locking primitives.
+
+Covers ``atomic_write_text`` (no leftover tempfiles, no torn writes), the
+``file_lock`` advisory-lock helper, and the frontmatter read/write
+roundtrip used by messages, tasks, and project metadata.
+"""
+
 import json
 from pathlib import Path
 
