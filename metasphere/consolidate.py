@@ -1008,9 +1008,9 @@ def classify_message(
         # INFO-AUTO-ARCHIVE path above. Pinging them in the 15-60min
         # window between stale and auto-archive generates 3 noise
         # !query escalations per !info before the archive lands
-        # (witnessed 2026-04-26 on msg-1777212455 + msg-1777219709, each
-        # of which got pinged at +15/+30/+45min before being archived
-        # at +60min). Skip the ping ladder for these labels — the
+        # (witnessed 2026-04-26 on two messages each pinged at
+        # +15/+30/+45min before being archived at +60min). Skip the
+        # ping ladder for these labels — the
         # auto-archive will catch them.
         # Only labels in REQUIRED_ACTION_LABELS reach the ping ladder.
         # !info/!reply and every other notification-shaped label

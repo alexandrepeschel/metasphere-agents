@@ -309,7 +309,7 @@ def test_run_update_records_state_before_restart(tmp_paths, monkeypatch):
     any post-restart code can run. Same for tmux-pane-fired updates
     (gateway-restart kills its own supervised tmux). Pre-fix, state
     advanced only on externally-run updates — `metasphere update
-    --status` showed stale info indefinitely on host srv1399986
+    --status` showed stale info indefinitely on an operator host
     between 2026-04-26 (last successful external run) and 2026-05-01."""
     head_seq = iter(["aaaa1111", "bbbb2222"])
     state_during_restart: dict = {}

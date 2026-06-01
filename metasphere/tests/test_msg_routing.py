@@ -4,11 +4,11 @@ Regression set: ``metasphere msg read msg-XXX`` failing for messages
 that exist on disk but have moved out of the live ``inbox/`` (or
 never landed in any inbox at all — only sender's outbox).
 
-Today's repro (2026-05-29): msg-1780061828 was sent lead→eng at 13:37Z,
-processed + completed + archived around 15:41Z. Subsequent
-``msg read msg-1780061828-3630629`` returned "not found" despite the
-archived file existing on disk — discovery walked inbox dirs only
-and the index pointed to the now-gone inbox path.
+Repro (2026-05-29): a lead→eng dispatch was sent, processed,
+completed, and archived ~2h later. The subsequent ``msg read
+<msg-id>`` returned "not found" despite the archived file existing
+on disk — discovery walked inbox dirs only and the index pointed to
+the now-gone inbox path.
 """
 
 from __future__ import annotations

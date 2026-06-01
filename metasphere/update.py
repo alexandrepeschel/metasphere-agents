@@ -866,7 +866,7 @@ def run_update(
     # create one regardless of whether python_changes triggers a
     # subsequent reinstall. Otherwise the host sits in a state where
     # HEAD is current, python_changes=False, and the venv never
-    # materializes (the 2026-04-16 srv1399986 stuck state).
+    # materializes (the 2026-04-16 stuck-state incident).
     #
     # _ensure_venv does a bootstrap `pip install -e .` during venv
     # creation; that counts as a reinstall for this cycle's purposes.

@@ -111,8 +111,8 @@ def _cmd_send(args: list[str]) -> int:
     # ``target, label, *rest = args`` unpack accepts it: the message
     # goes out with ``to: --to``, ``label: @whatever``, and the real
     # body buried in the rest. Hard-fail so the corruption can't
-    # silently ship (2026-05-05: @rage-changelog and @explorer both
-    # shipped this in the same morning). Single-dash (``-x``) is
+    # silently ship (witnessed 2026-05-05 across two agents in the
+    # same morning). Single-dash (``-x``) is
     # rejected too — same confabulation risk, no legitimate target /
     # label ever starts with ``-``.
     rc = _reject_flag_shape(target, "target", "send")

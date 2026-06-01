@@ -531,171 +531,13 @@ setup_path() {
 }
 
 # =============================================================================
-# OpenClaw Migration
-# =============================================================================
-
-OPENCLAW_DIR="${OPENCLAW_DIR:-$HOME/.openclaw}"
-OPENCLAW_DETECTED=false
-OPENCLAW_HAS_TELEGRAM=false
-
-detect_openclaw() {
-    if [[ -d "$OPENCLAW_DIR" ]]; then
-        OPENCLAW_DETECTED=true
-
-        # Check for Telegram token (canonical: channels.telegram.botToken)
-        if [[ -f "$OPENCLAW_DIR/openclaw.json" ]]; then
-            if jq -e '.channels.telegram.botToken // .telegram.botToken // .TELEGRAM_BOT_TOKEN // .env.TELEGRAM_BOT_TOKEN' "$OPENCLAW_DIR/openclaw.json" &>/dev/null 2>&1; then
-                OPENCLAW_HAS_TELEGRAM=true
-            fi
-        fi
-    fi
-}
-
-migrate_openclaw() {
-    if ! $OPENCLAW_DETECTED; then
-        return 0
-    fi
-
-    echo
-    echo "OpenClaw Detected"
-    echo "-----------------"
-    echo "Found existing OpenClaw installation at $OPENCLAW_DIR"
-    echo
-
-    # Show what we found before asking
-    echo "  Detected:"
-    [[ -d "$OPENCLAW_DIR/workspace" ]] && echo "    - Workspace directory" || echo "    - No workspace directory"
-    if [[ -f "$OPENCLAW_DIR/openclaw.json" ]]; then
-        echo "    - openclaw.json config file"
-        if $OPENCLAW_HAS_TELEGRAM; then
-            local preview_token
-            preview_token=$(jq -r '.channels.telegram.botToken // .telegram.botToken // .TELEGRAM_BOT_TOKEN // .env.TELEGRAM_BOT_TOKEN // empty' "$OPENCLAW_DIR/openclaw.json" 2>/dev/null)
-            if [[ -n "$preview_token" && "$preview_token" != "null" ]]; then
-                echo "    - Telegram token: ${preview_token:0:10}...${preview_token: -4}"
-            fi
-        fi
-    else
-        echo "    - No openclaw.json (token will need to be entered manually)"
-    fi
-    [[ -f "$OPENCLAW_DIR/memory/main.sqlite" ]] && echo "    - Memory database"
-    echo
-
-    if $INTERACTIVE; then
-        read -p "Migrate configuration from OpenClaw? [Y/n] " -n 1 -r
-        echo
-        if [[ $REPLY =~ ^[Nn]$ ]]; then
-            info "Skipped OpenClaw migration"
-            return 0
-        fi
-    fi
-
-    # Inline migration only — don't shell out to metasphere-migrate which
-    # may have different guards. Keep everything in one place.
-    migrate_openclaw_inline
-
-    # Ask about disabling OpenClaw
-    if $INTERACTIVE; then
-        echo
-        local gateway_running=false
-        if [[ "$(uname)" == "Darwin" ]]; then
-            launchctl list 2>/dev/null | grep -q "openclaw" && gateway_running=true
-        else
-            systemctl --user is-active openclaw-gateway &>/dev/null && gateway_running=true
-        fi
-
-        if $gateway_running; then
-            echo "OpenClaw gateway is currently running."
-            read -p "Disable OpenClaw gateway (Metasphere will take over)? [Y/n] " -n 1 -r
-            echo
-            if [[ ! $REPLY =~ ^[Nn]$ ]]; then
-                disable_openclaw_gateway
-            fi
-        fi
-    fi
-}
-
-migrate_openclaw_inline() {
-    # Inline migration for when script isn't installed yet
-    info "Migrating OpenClaw configuration..."
-
-    # Extract Telegram token (canonical openclaw schema: channels.telegram.botToken)
-    # Guard: only attempt if openclaw.json exists AND contains a token
-    if [[ -f "$OPENCLAW_DIR/openclaw.json" ]] && $OPENCLAW_HAS_TELEGRAM; then
-        local token=""
-        token=$(jq -r '.channels.telegram.botToken // .telegram.botToken // .TELEGRAM_BOT_TOKEN // .env.TELEGRAM_BOT_TOKEN // empty' "$OPENCLAW_DIR/openclaw.json" 2>/dev/null || echo "")
-
-        # Validate: token must look like a Telegram bot token (digits:alphanum)
-        if [[ -n "$token" && "$token" != "null" && "$token" =~ ^[0-9]+: ]]; then
-            mkdir -p "$METASPHERE_DIR/config"
-            echo "TELEGRAM_BOT_TOKEN=$token" > "$METASPHERE_DIR/config/telegram.env"
-            chmod 600 "$METASPHERE_DIR/config/telegram.env"
-            ok "Migrated Telegram token from OpenClaw"
-            TELEGRAM_BOT_TOKEN="$token"  # Set for later verification
-        else
-            warn "Found openclaw.json but token looks invalid (skipping)"
-        fi
-    elif [[ ! -f "$OPENCLAW_DIR/openclaw.json" ]]; then
-        info "No openclaw.json found — Telegram token will be configured manually"
-    fi
-
-    # Register openclaw workspace as live legacy context source
-    mkdir -p "$METASPHERE_DIR/config"
-    if [[ -d "$OPENCLAW_DIR/workspace" ]]; then
-        echo "$OPENCLAW_DIR/workspace" > "$METASPHERE_DIR/config/openclaw_workspace"
-        ok "Registered openclaw workspace for live context injection"
-    fi
-    if [[ -f "$OPENCLAW_DIR/memory/main.sqlite" ]]; then
-        echo "$OPENCLAW_DIR/memory/main.sqlite" > "$METASPHERE_DIR/config/openclaw_memory_db"
-        ok "Registered openclaw memory db"
-    fi
-
-    # Seed @orchestrator SOUL.md from workspace if absent
-    mkdir -p "$METASPHERE_DIR/agents/@orchestrator"
-    local soul_src=""
-    if [[ -f "$OPENCLAW_DIR/workspace/SOUL.md" ]]; then
-        soul_src="$OPENCLAW_DIR/workspace/SOUL.md"
-    elif [[ -f "$OPENCLAW_DIR/SOUL.md" ]]; then
-        soul_src="$OPENCLAW_DIR/SOUL.md"
-    fi
-    if [[ -n "$soul_src" && ! -f "$METASPHERE_DIR/agents/@orchestrator/SOUL.md" ]]; then
-        cp "$soul_src" "$METASPHERE_DIR/agents/@orchestrator/SOUL.md"
-        ok "Seeded SOUL.md from $soul_src"
-    fi
-
-    # Symlink openclaw skills into ~/.metasphere/skills (non-destructive)
-    if [[ -d "$OPENCLAW_DIR/skills" ]]; then
-        mkdir -p "$METASPHERE_DIR/skills"
-        local linked=0
-        shopt -s nullglob
-        for skill in "$OPENCLAW_DIR/skills"/*/; do
-            local name=$(basename "$skill")
-            [[ "$name" == _* ]] && continue
-            if [[ ! -e "$METASPHERE_DIR/skills/$name" ]]; then
-                ln -s "$skill" "$METASPHERE_DIR/skills/$name" 2>/dev/null && ((linked++))
-            fi
-        done
-        shopt -u nullglob
-        [[ $linked -gt 0 ]] && ok "Linked $linked openclaw skills"
-    fi
-
-    # Mark as migrated
-    if [[ -f "$OPENCLAW_DIR/openclaw.json" ]]; then
-        local tmp=$(mktemp)
-        jq '. + {metasphere_migrated: true, migrated_at: now | tostring}' "$OPENCLAW_DIR/openclaw.json" > "$tmp" 2>/dev/null && \
-            mv "$tmp" "$OPENCLAW_DIR/openclaw.json" || rm -f "$tmp"
-    fi
-}
-
-# =============================================================================
 # CAM (Collective Agent Memory)
 # =============================================================================
 #
 # Two responsibilities:
 #   1. Ensure the `cam` binary is installed and on PATH (idempotent).
 #   2. Make the user's existing CAM data dir (~/.cam) reachable so we don't
-#      re-index. If the installer is being run by the same user that already
-#      has ~/.cam, there's nothing to do — it's already in place. If the
-#      openclaw user lived under a different home, we link/copy.
+#      re-index.
 
 CAM_BIN=""
 
@@ -744,67 +586,14 @@ install_cam() {
 }
 
 migrate_cam_data() {
-    # If ~/.cam already exists, do nothing — the installer is running as a user
-    # who already has CAM data. This is the common case (single-user host).
+    # If ~/.cam already exists, no re-index is needed — CAM will pick
+    # up the existing index in place.
     if [[ -d "$HOME/.cam" ]]; then
         local size
         size=$(du -sh "$HOME/.cam" 2>/dev/null | cut -f1)
         ok "CAM data dir present: $HOME/.cam ($size) — no re-index needed"
-        return 0
     fi
-
-    # Cross-user case: openclaw lived in a different home. Look for .cam
-    # adjacent to the openclaw config dir.
-    if ! $OPENCLAW_DETECTED; then
-        return 0
-    fi
-
-    local openclaw_home
-    openclaw_home=$(dirname "$OPENCLAW_DIR")
-    local src="$openclaw_home/.cam"
-
-    if [[ ! -d "$src" ]]; then
-        info "No prior CAM data to migrate (no $src)"
-        return 0
-    fi
-
-    info "Found openclaw CAM data at $src - linking into $HOME/.cam"
-    # Symlink rather than copy to keep one source of truth and avoid
-    # duplicating the sqlite index (often hundreds of MB).
-    if ln -s "$src" "$HOME/.cam" 2>/dev/null; then
-        local size
-        size=$(du -sh "$src" 2>/dev/null | cut -f1)
-        ok "Linked CAM data ($size) — no re-index needed"
-    else
-        warn "Symlink failed - falling back to copy"
-        cp -a "$src" "$HOME/.cam" && ok "Copied CAM data" || warn "Copy failed"
-    fi
-}
-
-disable_openclaw_gateway() {
-    info "Disabling OpenClaw gateway..."
-
-    if [[ "$(uname)" == "Darwin" ]]; then
-        local plist="$HOME/Library/LaunchAgents/com.openclaw.gateway.plist"
-        if [[ -f "$plist" ]]; then
-            launchctl unload "$plist" 2>/dev/null || true
-            mv "$plist" "${plist}.disabled"
-            ok "Disabled OpenClaw (launchd)"
-        fi
-    else
-        if systemctl --user is-active openclaw-gateway &>/dev/null; then
-            systemctl --user stop openclaw-gateway 2>/dev/null || true
-            systemctl --user disable openclaw-gateway 2>/dev/null || true
-            ok "Disabled OpenClaw (systemd)"
-        fi
-    fi
-
-    # Update OpenClaw config
-    if [[ -f "$OPENCLAW_DIR/openclaw.json" ]]; then
-        local tmp=$(mktemp)
-        jq '. + {gateway_disabled: true}' "$OPENCLAW_DIR/openclaw.json" > "$tmp" 2>/dev/null && \
-            mv "$tmp" "$OPENCLAW_DIR/openclaw.json" || rm -f "$tmp"
-    fi
+    return 0
 }
 
 # =============================================================================
@@ -1463,11 +1252,9 @@ install_skills() {
 }
 
 main() {
-    detect_openclaw
     check_dependencies
     setup_directories
     install_scripts
-    migrate_openclaw      # Before telegram - migration may provide token
     install_cam           # Ensure cam binary is available
     migrate_cam_data      # Reuse existing ~/.cam to skip re-index
     setup_telegram

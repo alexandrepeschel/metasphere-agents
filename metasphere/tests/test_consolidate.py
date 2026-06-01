@@ -1019,8 +1019,8 @@ def test_msg_classify_stale_nonpinned(repo, tmp_paths):
 def test_msg_info_in_stale_window_does_not_ping(repo, tmp_paths):
     # !info read between the 15min stale window and the 60min INFO-AUTO-
     # ARCHIVE window must classify ACTIVE, not STALE. Witnessed
-    # 2026-04-26 on msg-1777212455 + msg-1777219709: each got 3 STALE
-    # pings at +15/+30/+45min (each ping = a !query message back to
+    # 2026-04-26 on two messages, each of which got 3 STALE pings at
+    # +15/+30/+45min (each ping = a !query message back to
     # @orchestrator) before INFO-AUTO-ARCHIVE landed at +60min. !info is
     # notification-shaped — read-without-action is fine, no ping
     # ladder required, the auto-archive catches it.

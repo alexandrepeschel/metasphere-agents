@@ -1,9 +1,9 @@
 """Tests for ``metasphere msg send`` CLI shim (cli/messages.py).
 
 Focused on the flag-shaped-positional reject guard added 2026-05-05
-after @rage-changelog (msg-1777966286-551715) and @explorer
-(msg-1777975636) both shipped malformed messages by confabulating
-``--to`` / ``--body`` flags. The shim is purely positional —
+after two agents in the same morning both shipped malformed messages
+by confabulating ``--to`` / ``--body`` flags. The shim is purely
+positional —
 ``send <target> <label> <body...>`` — so a literal ``--to`` was
 silently accepted as the target, the real target became the label,
 and the body landed with the leading ``--body`` token still in it.
@@ -22,9 +22,9 @@ from metasphere.cli import messages as cli_msgs
 
 def test_send_rejects_flag_shaped_target(capsys, tmp_paths):
     """First positional starting with ``--`` is rejected. Reproduces
-    the @rage-changelog / @explorer shape exactly: agent invokes
-    ``send --to @orchestrator --body "..."`` thinking those are flags;
-    without the guard, the unpack writes ``to: --to`` to disk."""
+    the historical confabulation: agent invokes ``send --to
+    @orchestrator --body "..."`` thinking those are flags; without
+    the guard, the unpack writes ``to: --to`` to disk."""
     rc = cli_msgs._cmd_send(["--to", "@orchestrator", "--body", "some text"])
     assert rc == 1
     _, err = capsys.readouterr()

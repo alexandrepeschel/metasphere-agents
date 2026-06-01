@@ -5,9 +5,9 @@ When the best-effort tmux inject in ``wake_recipient_if_live`` returns
 :func:`metasphere.messages.send_message` escalates to
 :func:`metasphere.agents.wake_persistent` so the recipient's session
 gets cold-started (or the inject retried) instead of leaving the
-message stranded in the inbox. Regression target: msg-1780086179
-(a !task sat 7h unread on a nominally-alive but unresponsive
-session before the operator noticed).
+message stranded in the inbox. Regression target: a !task that
+sat 7h unread on a nominally-alive but unresponsive session before
+the operator noticed.
 """
 
 from __future__ import annotations
@@ -203,5 +203,5 @@ def test_is_wakeable_agent_target_filters(tmp_paths):
 
 def test_high_priority_constant_is_exact_set():
     # Strict superset of the original {!task, !urgent} brief plus
-    # !query per the 20:26Z amendment (msg-1780086430). No drift.
+    # !query per a later amendment to the original directive. No drift.
     assert m.HIGH_PRIORITY_LABELS == frozenset({"!task", "!urgent", "!query"})

@@ -45,7 +45,7 @@ _READY_MARKER = "bypass permissions"
 # recipient's inbox and injects only a short pointer banner. The Claude
 # Code TUI's bracketed-paste handler can silently drop multi-KB payloads
 # — the partial body lands in the input box and C-m commits the
-# truncated text. msg-1780061828 (2026-05-29) was a ~3KB T1 dispatch
+# truncated text. The repro case (2026-05-29) was a ~3KB dispatch
 # that came up as an empty banner on the eng pane; the bootstrap-
 # pointer workaround used outbox-path indirection to recover. 512B is
 # well under the smallest payload that has reproduced truncation so far

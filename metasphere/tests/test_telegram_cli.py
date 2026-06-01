@@ -299,14 +299,14 @@ def test_send_bare_default_recipient_resolves_to_group_rejected(
         "default-recipient: groupy\n"
         "contacts:\n"
         "  groupy:\n"
-        "    telegram: -5262638621\n"
+        "    telegram: -1000000000\n"
     )
     monkeypatch.setenv("METASPHERE_AGENT_ID", "@orchestrator")
     rc = _cli.main(["send", "secret briefing"])
     assert rc == 2
     assert stub_send == []
     err = capsys.readouterr().err
-    assert "group chat id -5262638621" in err
+    assert "group chat id -1000000000" in err
 
 
 def test_send_explicit_chat_id_group_rejected(addressbook, stub_send,
@@ -329,14 +329,14 @@ def test_send_explicit_to_resolving_to_group_rejected(
     ab.write_text(
         "contacts:\n"
         "  groupy:\n"
-        "    telegram: -5262638621\n"
+        "    telegram: -1000000000\n"
     )
     monkeypatch.setenv("METASPHERE_AGENT_ID", "@orchestrator")
     rc = _cli.main(["send", "leak", "--to", "groupy"])
     assert rc == 2
     assert stub_send == []
     err = capsys.readouterr().err
-    assert "group chat id -5262638621" in err
+    assert "group chat id -1000000000" in err
 
 
 # ---------- send-document fallback (same chain) ----------

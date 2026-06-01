@@ -81,7 +81,7 @@ SACRED_LABELS = PINNED_LABELS
 # tmux inject in ``wake_recipient_if_live`` returns delivered=False
 # (dormant session, deferred typing, unresolvable target). Without
 # the escalation, !task can sit unread for hours when the recipient
-# is dormant — see msg-1780086179 / @writing-lead's 7h-stuck !task.
+# is dormant (a 7h-stuck !task incident drove this fix).
 # !info, !done, and !reply intentionally stay on the heartbeat
 # cadence: they're async status flow where REPL pickup on the next
 # turn is the correct semantic.
@@ -558,9 +558,9 @@ def send_message(
     # Escalate to session-respawn for high-priority labels when the
     # best-effort tmux inject above didn't actually land. Without this,
     # a !task to a dormant recipient sits unread until the next idle
-    # heartbeat tick (see msg-1780086179 incident: a !task sat 7h
-    # unread on a nominally-alive but unresponsive recipient before
-    # the operator noticed). wake_persistent injects
+    # heartbeat tick (incident: a !task sat 7h unread on a
+    # nominally-alive but unresponsive recipient before the operator
+    # noticed). wake_persistent injects
     # into a live session OR cold-starts a fresh one; B1's truncation-
     # safe bootstrap-pointer handles long bodies automatically.
     if (

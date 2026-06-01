@@ -9,10 +9,10 @@ example):
 .. code-block:: yaml
 
     agents:
-      worldwire-eng:
-        projects: [worldwire]
+      alpha-eng:
+        projects: [alpha]
       orchestrator:
-        projects: [worldwire, metasphere-agents, writing]
+        projects: [alpha, beta, metasphere-agents]
 
 Resolution context: the per-turn project capsule
 (:func:`metasphere.context._render_project_capsule`) consults this

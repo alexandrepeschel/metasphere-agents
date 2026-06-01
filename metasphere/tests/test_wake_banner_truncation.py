@@ -3,7 +3,7 @@
 When a wake ``first_task`` body exceeds the threshold, ``wake_persistent``
 persists the full body as a ``!task`` message in the recipient's inbox
 and injects only a short pointer banner — bypassing the Claude Code TUI's
-bracketed-paste cap that produced the msg-1780061828 repro on 2026-05-29.
+bracketed-paste cap that produced the repro case on 2026-05-29.
 """
 
 from __future__ import annotations

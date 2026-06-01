@@ -33,7 +33,7 @@
 # Multi-project agents (orchestrator-style):
 #   agents:
 #     orchestrator:
-#       projects: [worldwire, metasphere-agents, writing]
+#       projects: [alpha, beta, gamma]
 #   One ``## Project: <name>`` section renders per listed project,
 #   each with its own LEARNINGS/MEMORY recency window + footer.
 #
@@ -52,35 +52,23 @@
 # resolution chain in context and ``docs/PROJECTS.md`` for design
 # rationale.
 
+# Example roster. Replace with your own agents and projects after
+# install — install.sh skips this file when ~/.metasphere/teams.yaml
+# already exists, so per-host edits survive upgrades.
 agents:
   orchestrator:
-    projects: [metasphere-agents, worldwire, writing, knowledge-forest-poc, cam, funding]
-
-  metasphere-eng:
-    projects: [metasphere-agents]
-  metasphere-critic:
-    projects: [metasphere-agents]
-  metasphere-lead:
-    projects: [metasphere-agents]
-  metasphere-research:
     projects: [metasphere-agents]
 
-  worldwire-eng:
-    projects: [worldwire]
-  worldwire-critic:
-    projects: [worldwire]
-  worldwire-lead:
-    projects: [worldwire]
-  worldwire-research:
-    projects: [worldwire]
+  # Single-project team example:
+  # alpha-eng:
+  #   projects: [alpha]
+  # alpha-critic:
+  #   projects: [alpha]
+  # alpha-lead:
+  #   projects: [alpha]
+  # alpha-research:
+  #   projects: [alpha]
 
-  writing-lead:
-    projects: [writing]
-  writing-research:
-    projects: [writing]
-
-  recurse-research:
-    projects: [knowledge-forest-poc]
-
-  polymarket-agents-polymarket:
-    projects: [polymarket-agents]
+  # Multi-project agent example:
+  # beta-research:
+  #   projects: [beta, gamma]
