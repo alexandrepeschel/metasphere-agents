@@ -1,4 +1,13 @@
-"""``metasphere daemon`` — systemd wrapper for the three harness services."""
+"""``metasphere daemon`` — systemd wrapper for the harness services.
+
+Front-end for ``systemctl`` calls against the three long-running
+metasphere services (gateway, heartbeat, schedule). Each subcommand
+maps onto the corresponding ``systemctl <action> metasphere-<svc>``
+invocation; this module owns the unit-name conventions and resolves
+``--user`` vs system scope from the active install. Failures are
+reported back as the underlying ``systemctl`` exit code so callers can
+distinguish "service not installed" from "service crashed".
+"""
 
 from __future__ import annotations
 

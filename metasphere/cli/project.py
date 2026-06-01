@@ -1,4 +1,12 @@
-"""CLI for project lifecycle (create, list, members, chat)."""
+"""``metasphere project`` — project + member-agent lifecycle.
+
+Front-end for ``metasphere.project`` covering project creation, member
+listing, and Telegram chat/topic wiring. Projects are the scoping unit
+above individual agents: a project owns a directory under the
+projects/ tree and a set of agent assignments. The shim parses argv
+and dispatches; all state writes (project dirs, member rosters,
+Telegram topic registration) go through the project module.
+"""
 
 from __future__ import annotations
 

@@ -1,4 +1,12 @@
-"""CLI for git hook installation + per-event handlers."""
+"""``metasphere hooks`` — install + run Git hook handlers.
+
+Two distinct surfaces in one shim. ``install``/``uninstall`` write thin
+``.git/hooks/<event>`` shell scripts that re-exec ``metasphere hooks
+<event>``; the per-event handler in ``metasphere.git_hooks`` is where
+the actual policy lives (audit-docs nudges, trace capture, etc.).
+Designed so a repo's hook chain can be regenerated from source without
+hand-editing ``.git/hooks/``.
+"""
 
 from __future__ import annotations
 

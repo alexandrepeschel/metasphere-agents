@@ -1,4 +1,12 @@
-"""CLI for the cron-style job scheduler."""
+"""``metasphere schedule`` — cron-style job scheduler CLI.
+
+Front-end to ``metasphere.schedule``: list configured jobs, run one
+ad-hoc, enable/disable, or run the scheduler loop itself as a
+daemon. Jobs are stored as on-disk records (not crontab entries) so
+the harness owns its own schedule semantics — cadence, scope, and
+dispatch target are written through this module, not edited
+by hand under ``~/.metasphere/schedule/``.
+"""
 
 from __future__ import annotations
 

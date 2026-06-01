@@ -1,4 +1,12 @@
-"""CLI shims for the agent lifecycle module."""
+"""``metasphere agent`` — agent lifecycle CLI shim.
+
+Dispatches the ``agent`` subcommand family (``list``, ``status``,
+``spawn``, ``wake``, ``seed``, ``specs``) onto ``metasphere.agents`` and
+``metasphere.specs``. Handles both persistent agents (long-lived tmux +
+REPL) and ephemeral one-shots; the ``spawn`` path also threads
+Authority/Responsibility/Accountability fields into the agent's
+bootstrap so every fan-out carries A/R/A context.
+"""
 
 from __future__ import annotations
 

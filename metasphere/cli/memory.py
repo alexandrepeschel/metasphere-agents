@@ -1,4 +1,11 @@
-"""CLI for the memory subpackage."""
+"""``metasphere memory`` — query the project-memory store.
+
+Search front-end for ``metasphere.memory``. Routes search queries
+through the hybrid (FTS + structured) backend and renders hits either
+as a free-form listing or as a ready-to-paste context block for an
+agent prompt. The shim itself is stateless; ingestion + indexing happen
+inside the memory subpackage and during posthook capture, not here.
+"""
 
 from __future__ import annotations
 

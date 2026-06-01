@@ -1,4 +1,12 @@
-"""CLI for tmux session management."""
+"""``metasphere session`` — per-agent tmux session control.
+
+Front-end onto ``metasphere.session`` and ``metasphere.tmux`` for
+operating on a single agent's session: attach, capture pane state,
+kill, restart. Each persistent agent owns one tmux session running a
+Claude Code REPL; this shim is the operator's read/write surface
+into that session without forcing them to remember the underlying
+``metasphere-<agent>`` naming convention.
+"""
 
 from __future__ import annotations
 

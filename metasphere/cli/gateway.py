@@ -1,4 +1,12 @@
-"""Gateway CLI entry point."""
+"""``metasphere gateway`` — control surface for the gateway daemon.
+
+Front-end onto ``metasphere.gateway`` for operator-driven actions: ad-hoc
+Telegram injection (drop a message straight onto an agent's inbox as if
+it had arrived from the bot), status probes, and start/stop helpers
+that proxy the systemd unit. The gateway daemon itself runs out of
+``metasphere.gateway.daemon``; this shim never embeds the long-running
+loop — it only emits signals and one-shot RPC-style commands.
+"""
 
 from __future__ import annotations
 

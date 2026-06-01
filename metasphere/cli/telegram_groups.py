@@ -1,4 +1,12 @@
-"""CLI for Telegram forum-group + topic management."""
+"""``metasphere telegram groups`` — Telegram forum + topic management.
+
+Wraps ``metasphere.telegram.groups`` so an operator can register the
+forum supergroup, list/create per-project topics, and reconcile the
+local topic-id mapping with what Telegram actually owns. Topic ids are
+the join key between project scope and Telegram message routing in the
+gateway, so this is the canonical surface for rewiring that mapping
+without touching the gateway state files by hand.
+"""
 
 from __future__ import annotations
 

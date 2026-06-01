@@ -1,4 +1,11 @@
-"""CLI: ``metasphere sessions`` — multi-agent observability."""
+"""``metasphere sessions`` — multi-agent tmux viewer.
+
+Builds and tears down the "viewer" tmux session: a single tmux window
+that mirrors every persistent agent's pane side-by-side for at-a-glance
+observability. The viewer is read-only — input goes to its source
+panes, this just composes a layout. Use the singular ``metasphere
+session`` (this module's sibling) for write operations on one agent.
+"""
 
 from __future__ import annotations
 

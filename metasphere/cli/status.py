@@ -1,4 +1,11 @@
-"""``metasphere status`` — pure-Python system status summary."""
+"""``metasphere status`` — single-screen system summary.
+
+Pure-Python renderer over ``metasphere.status.summary()`` — listing
+live tmux sessions, daemon health, and recent event counts in a
+single-screen format intended for ``watch``-style polling and the
+top of operator briefings. No state mutation; safe to run from any
+hook or hot path.
+"""
 
 from __future__ import annotations
 
