@@ -617,8 +617,9 @@ def _sync_claude_integration(repo: Path, home_dir: Path,
     * Each ``skills/<name>/`` containing ``SKILL.md`` is linked into
       ``<home>/.claude/skills/<name>``. A pre-existing real directory
       (not a symlink) with a ``.user-customized`` marker is left alone.
-    * Each ``.claude/commands/*.md`` is linked into
-      ``<home>/.claude/commands/<basename>``.
+    * Each ``templates/claude-commands/*.md`` is linked into both
+      ``<home>/.claude/commands/<basename>`` and
+      ``<repo>/.claude/commands/<basename>``.
     * ``settings.local.json`` ``UserPromptSubmit`` + ``Stop`` hook
       commands are rewritten to the current venv form via
       :func:`_sync_hook_paths`.
@@ -665,24 +666,35 @@ def _sync_claude_integration(repo: Path, home_dir: Path,
             except OSError as e:
                 logger.info("skills symlink skipped for %s: %s", name, e)
 
-    # Commands
-    src_cmds = repo / ".claude" / "commands"
+    # Commands. Source moved from ``.claude/commands/`` (per-machine
+    # runtime state, gitignored) to ``templates/claude-commands/``
+    # (shipped). Symlinks land in both ``~/.claude/commands/`` (user-
+    # level) and ``<repo>/.claude/commands/`` (project-level), mirroring
+    # install.sh::install_skills.
+    src_cmds = repo / "templates" / "claude-commands"
     if src_cmds.is_dir():
-        dst_cmds = home_dir / ".claude" / "commands"
-        dst_cmds.mkdir(parents=True, exist_ok=True)
-        for md in sorted(src_cmds.glob("*.md")):
-            if not md.is_file():
-                continue
-            dst = dst_cmds / md.name
-            if dst.is_symlink() or dst.is_file():
+        dst_dirs = [
+            home_dir / ".claude" / "commands",
+            repo / ".claude" / "commands",
+        ]
+        for dst_cmds in dst_dirs:
+            dst_cmds.mkdir(parents=True, exist_ok=True)
+            for md in sorted(src_cmds.glob("*.md")):
+                if not md.is_file():
+                    continue
+                dst = dst_cmds / md.name
+                if dst.is_symlink() or dst.is_file():
+                    try:
+                        dst.unlink()
+                    except OSError:
+                        pass
                 try:
-                    dst.unlink()
-                except OSError:
-                    pass
-            try:
-                os.symlink(md.resolve(), dst)
-            except OSError as e:
-                logger.info("command symlink skipped for %s: %s", md.name, e)
+                    os.symlink(md.resolve(), dst)
+                except OSError as e:
+                    logger.info(
+                        "command symlink skipped for %s -> %s: %s",
+                        md.name, dst, e,
+                    )
 
     # Hook paths in settings.local.json. See _sync_hook_paths for
     # rationale (closes the silent-failure mode where a relocated

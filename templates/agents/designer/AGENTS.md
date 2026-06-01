@@ -104,7 +104,7 @@ The surfaces under your mandate:
 
 - **CLI commands** (`metasphere/cli/`): naming, flag consistency,
   output format, help text, error messages.
-- **Slash commands** (`templates/install/.claude/commands/` and the
+- **Slash commands** (`templates/claude-commands/` and the
   per-agent slash commands surfaced via the harness): discoverability,
   description quality, naming.
 - **AGENTS.md templates** (`templates/agents/<role>/AGENTS.md`):

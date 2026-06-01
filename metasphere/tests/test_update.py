@@ -654,18 +654,25 @@ def test_sync_claude_integration_creates_symlinks(tmp_path):
     skill_dir = repo / "skills" / "demo"
     skill_dir.mkdir(parents=True)
     (skill_dir / "SKILL.md").write_text("# demo\n")
-    cmd_dir = repo / ".claude" / "commands"
+    # Slash command source lives under templates/claude-commands/
+    # (the .claude/ directory is per-machine runtime state and
+    # gitignored).
+    cmd_dir = repo / "templates" / "claude-commands"
     cmd_dir.mkdir(parents=True)
     (cmd_dir / "foo.md").write_text("cmd\n")
 
     _update._sync_claude_integration(repo, home)
 
     skill_link = home / ".claude" / "skills" / "demo"
-    cmd_link = home / ".claude" / "commands" / "foo.md"
+    user_cmd_link = home / ".claude" / "commands" / "foo.md"
+    repo_cmd_link = repo / ".claude" / "commands" / "foo.md"
     assert skill_link.is_symlink()
     assert skill_link.resolve() == skill_dir.resolve()
-    assert cmd_link.is_symlink()
-    assert cmd_link.resolve() == (cmd_dir / "foo.md").resolve()
+    # Both user-level and repo-level symlinks land — same source.
+    assert user_cmd_link.is_symlink()
+    assert user_cmd_link.resolve() == (cmd_dir / "foo.md").resolve()
+    assert repo_cmd_link.is_symlink()
+    assert repo_cmd_link.resolve() == (cmd_dir / "foo.md").resolve()
 
 
 def test_sync_claude_integration_respects_user_customized(tmp_path):

@@ -1,3 +1,0 @@
-{
-  "_comment": "Hooks live in .claude/settings.local.json (per-machine, gitignored). install.sh writes it with this machine's absolute venv path: '<METASPHERE_DIR>/venv/bin/metasphere hooks context' (UserPromptSubmit) and '... metasphere hooks posthook' (Stop). The committed settings.json must NOT contain hardcoded paths — they don't work cross-machine and claude-code merges both files, so a wrong path here causes a duplicate hook + error every turn."
-}

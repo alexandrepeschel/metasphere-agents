@@ -1304,8 +1304,13 @@ install_skills() {
 
     local skills_src="$SCRIPT_DIR/skills"
     local skills_dst="$HOME/.claude/skills"
-    local commands_src="$SCRIPT_DIR/.claude/commands"
-    local commands_dst="$HOME/.claude/commands"
+    # Slash commands ship under templates/claude-commands/ in the
+    # source repo (not under .claude/, which is per-machine runtime
+    # state and gitignored). install_skills materializes them into
+    # the operator's Claude config dirs at install time.
+    local commands_src="$SCRIPT_DIR/templates/claude-commands"
+    local commands_dst_user="$HOME/.claude/commands"
+    local commands_dst_repo="$SCRIPT_DIR/.claude/commands"
     local installed=0
 
     # Skills: symlink each skill directory into ~/.claude/skills/
@@ -1325,18 +1330,25 @@ install_skills() {
         done
     fi
 
-    # Commands: symlink slash command .md files into ~/.claude/commands/
+    # Commands: symlink each templates/claude-commands/*.md into
+    #   1. ~/.claude/commands/    — user-level (works everywhere).
+    #   2. <repo>/.claude/commands/ — project-level (works when running
+    #      claude from inside this repo). Same pattern as
+    #      seed_claude_permissions which writes settings.local.json to
+    #      both locations.
+    # Symlinks (not copies) so a git pull updates the live commands.
     if [[ -d "$commands_src" ]]; then
-        mkdir -p "$commands_dst"
+        mkdir -p "$commands_dst_user" "$commands_dst_repo"
         for cmd_file in "$commands_src"/*.md; do
             [[ -f "$cmd_file" ]] || continue
             local cmd_target=$(cd "$(dirname "$cmd_file")" && pwd)/$(basename "$cmd_file")
-            ln -sfn "$cmd_target" "$commands_dst/$(basename "$cmd_file")"
+            ln -sfn "$cmd_target" "$commands_dst_user/$(basename "$cmd_file")"
+            ln -sfn "$cmd_target" "$commands_dst_repo/$(basename "$cmd_file")"
             ((installed++))
         done
     fi
 
-    [[ $installed -gt 0 ]] && ok "Linked $installed skills/commands into ~/.claude/"
+    [[ $installed -gt 0 ]] && ok "Linked $installed skills/commands into ~/.claude/ + repo .claude/"
 }
 
 main() {
