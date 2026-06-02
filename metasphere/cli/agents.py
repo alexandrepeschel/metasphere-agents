@@ -507,7 +507,12 @@ def _list_specs() -> int:
     from metasphere import specs as _specs
     items = _specs.list_specs()
     if not items:
-        print("No specs found. Place YAML files in specs/ or ~/.metasphere/specs/")
+        print(
+            "No specs found. Create a role directory under "
+            "~/.metasphere/templates/agents/<role>/ (or "
+            "templates/agents/<role>/ in a repo checkout) with at "
+            "least config.md — see templates/agents/README.md."
+        )
         return 0
     print("Available agent specs:")
     for s in items:
