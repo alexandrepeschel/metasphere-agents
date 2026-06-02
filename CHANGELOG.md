@@ -6,36 +6,38 @@ All notable changes to Metasphere Agents will be documented here.
 
 ## Unreleased
 
+---
+
+## 2026-05-31 to 2026-06-02 — public-repo de-personalization sweep + templates/specs full collapse
+
+Twelve non-bump commits across two days. Two coherent themes drove the bulk of the work: (a) a six-PR sweep lifting operator-specific state out of source ahead of public-repo release — brain content, root `CLAUDE.md`, `DIRECTIVES.yaml`, the OpenClaw precursor migration, and `.claude/` runtime state were each moved to per-instance directories under `~/.metasphere/`, with the OpenClaw migration restored as the first example under a new generic `migrate/*` dispatcher; (b) the `specs/<spec>/` → `templates/agents/<role>/` collapse landed in three follow-on PRs that fold persona stacks into one directory per role, fix the metadata substitution that PR #140 left dangling, and add an agent-home layout reference. Plus a small docs-and-tests hygiene pass.
+
+### Public-repo de-personalization sweep
+
+The repo was carrying operator-specific state in source — broadcast-channel content, the operator's roster, a precursor-system migration gated on `[[ -d "$HOME/.openclaw" ]]`, Claude Code per-machine settings, and "Julian" / "julian" references across docstrings, comments, and fixtures. Six PRs landed in a single afternoon stripping each surface while preserving the loader contracts and operator state on the author's box.
+
+- **Lift `brain/` and rename root `CLAUDE.md` → `docs/MAINTAINER.md`.** Per-instance maintainer notes don't belong in source. Move plus a small unrelated correctness fix bundled in the same PR: `create_task()` was unguarded against flag-shaped `created_by` / `assigned_to` / `project` values, where the CLI guards in `cli/tasks._cmd_new` had already rejected them. `spawn_ephemeral` (agents.py:495) forwards `parent` directly as `created_by`, so a flag-shaped parent bypassed the CLI parser and landed in frontmatter — surfaced by a 13-day-old fossil task with 1098 lifecycle pings and `created_by=--bogus`. Lifted the same `_validate_assignee` / `_validate_project_name` guards already shipped for the mutation paths into `create_task` itself, plus a new `_validate_created_by`. (`37be1d2` #132)
+- **Scrub bash-cutover legacy + stale proposal prose.** Three "Historical document." files from the April 2026 bash→Python migration deleted (`PORTING.md`, `BASH_TO_PY_PARITY.md`, `CLI_PORTING_STATUS.md`); the live CLI surface is in the auto-generated `docs/CLI.md`. `PROJECTS.md` trimmed: the "Per-project memory" section is current-as-shipped and stays; everything from "What exists today" onward was a 2026-04-08 design proposal that's now either shipped or superseded. (`7e14900` #133)
+- **Lift `DIRECTIVES.yaml` + scrub operator-name refs from source.** Broadcast-channel content is per-instance — preserved at `~/.metasphere/DIRECTIVES.yaml` on the author's box, removed from the repo, `.gitignore` prevents re-add. The loader in `metasphere/directives.py` is unchanged and graceful-degrades when absent. "Julian" / "julian" references replaced with role-neutral wording across docstrings, comments, test fixtures, and `CHANGELOG.md`; verbatim quotes that documented an operator directive marked `[ATTRIBUTED EXAMPLE]`. The `@julian` agent fixture renamed to `@alice` in tests. (`91dfe53` #134)
+- **Rip OpenClaw migration + scrub operator-state from source.** Removed ~270 lines from `install.sh` (`detect_openclaw`, `migrate_openclaw`, `migrate_openclaw_inline`, `disable_openclaw_gateway`) — operator-only code gated on `[[ -d "$HOME/.openclaw" ]]`, dead on stranger installs. `templates/install/teams.yaml` replaced the operator's actual roster with a single `@orchestrator` default plus commented-out alpha/beta examples; `install.sh` is non-overwriting for this file so existing operator setups stay intact. `metasphere/teams.py` module docstring example switched from worldwire-* to alpha-* placeholders. Source-comment and test-docstring strips of operator-state. (`d2b4bf4` #135)
+- **Generic `migrate/*` dispatcher + OpenClaw as first source.** Restores the OpenClaw precursor migration ripped wholesale in #135, but as a self-contained subdir under `migrate/openclaw/` — not inlined back into `install.sh`. The installer runs a generic dispatcher that walks `migrate/*/`; future precursor tools drop in as siblings without touching the installer. Contract per subdir: `detect.sh` (exits 0 if source present), `migrate.sh` (performs the import; inherits `METASPHERE_DIR`, `INTERACTIVE`, `VERBOSE`; idempotent), optional `README.md`. Interactive mode prompts "Migrate from <name>? [Y/n]" per detected source. (`d04ee37` #136)
+- **Lift `.claude/` to runtime state; ship slash commands in `templates/`.** `.claude/` is per-machine Claude Code state: `settings.local.json` holds operator absolute venv hook paths, `scheduled_tasks.json` holds runtime state, `settings.json` was a comment-only marker. Shipping any of it leaks operator state or breaks on stranger installs. `.claude/commands/{project,session,team}.md` moved to `templates/claude-commands/` (content the harness ships belongs alongside other shipped content); `.claude/settings.json` and `.claude/.gitkeep` deleted; `.gitignore` bumped from two specific files to the whole directory. (`9dfc62a` #137)
+
 ### templates+specs full collapse
 
-`specs/<spec>/` has been folded into `templates/agents/<role>/`. Each
-role directory now owns the full persona stack — `SOUL.md`,
-`MISSION.md`, `AGENTS.md`, `config.md` — and the spec-to-role
-indirection is gone. Spec names and role names are now identical for
-the five shipped roles:
+`specs/<spec>/` has been folded into `templates/agents/<role>/`. Each role directory now owns the full persona stack — `SOUL.md`, `MISSION.md`, `AGENTS.md`, `config.md` — and the spec-to-role indirection is gone. Spec names and role names are now identical for the five shipped roles: `implementer` → `eng`, `planner` → `lead`, `reviewer` → `critic`, `monitor` → `explorer`, `researcher` → `researcher` (unchanged).
 
-- `implementer` → `eng`
-- `planner` → `lead`
-- `reviewer` → `critic`
-- `monitor` → `explorer`
-- `researcher` → `researcher` (unchanged)
+- **Collapse `specs/` into `templates/agents/<role>/`.** Five spec dirs moved into the matching role dir with `config.md` `name` field rewritten to equal the new directory name. Two new minimal `config.md` stubs land for the roles without a shipped persona (`designer`, `orchestrator`) so `list_specs()` discovers them uniformly and the seeder doesn't crash on `--spec orchestrator`. `metasphere/specs.py` drops the `specs/` search tier. **Breaking change** for callers that hardcode the legacy names: `metasphere agent seed --spec implementer` (and the four siblings) now returns no spec. A warning logs the new name. **Operator state preserved**: user-override specs at `~/.metasphere/specs/<custom>/` continue to resolve via a deprecated search tier; move them to `~/.metasphere/templates/agents/<custom>/` at leisure. **Drift-check note**: live agents seeded before this PR carry their old spec name in `~/.metasphere/agents/<id>/spec`; `metasphere update` drift-check returns `None` for one tick on those agents until the next `metasphere agent seed` rewrites the sidecar. (`a54bff9` #140)
+- **Substitute Role/Spec metadata instead of hardcoded names.** PR #140 renamed the spec dirs and the `name` field in each `config.md` but the role-template `MISSION.md` and `SOUL.md` kept the OLD `Role: <old>` / `Spec: <old>` as literal strings — a fresh `metasphere agent seed --spec eng @foo` landed an agent home with `Role: developer / Spec: implementer` pointing at names that no longer exist anywhere else post-collapse. Switched the two metadata lines in each `MISSION.md` and `SOUL.md` to use the existing `{{role}}` and `{{spec_name}}` substitution form (already documented in `templates/agents/README.md`), so the metadata renders against live identity. (`7e51b6e` #141)
+- **Add agent home layout reference.** Walkthrough of what files live in `~/.metasphere/agents/@<name>/`, what each one does, and what an orchestrator vs specialist role minimum viable setup looks like. Sibling to `templates/agents/README.md` (template side); this covers the per-instance side. Triggered by an orchestrator setup missing `AGENTS.md` with no clear reference for what should be there. (`8974073` #142)
 
-**Breaking change** for callers that hardcode the legacy names:
-`metasphere agent seed --spec implementer` (and the four siblings)
-now returns no spec. A warning logs the new name so shell aliases
-and scripts can be updated. The new invocation is `metasphere agent
-seed --spec eng @<agent>`.
+### Docs + test hygiene
 
-**Operator state preserved.** User-override specs at
-`~/.metasphere/specs/<custom>/` continue to resolve via a deprecated
-search tier. Move them to `~/.metasphere/templates/agents/<custom>/`
-at leisure.
+- **Expand thin module docstrings across `metasphere/`.** Replaces one-line placeholder docstrings on 22 modules and fills in the missing one in `metasphere/cli/__init__.py`. Each header now opens with a one-line summary plus a 2–4 sentence paragraph naming the module's role in the broader harness — sibling module that owns the real logic, what the shim is responsible for, and any non-obvious behaviour worth flagging (e.g. that `restart` cascade-reaps tmuxes, that the messages shim does not implicitly wake recipients). Docstring-only — 1599 tests still green. (`219fa80` #138)
+- **Prune redundant integration test file + add test-module docstrings.** `metasphere/tests/test_integration.py` deleted: Wave-2 (`test_integration_2.py`) was added later but never folded the original in. Five of six tests were demonstrable duplicates (bash-msg roundtrip, concurrent update torn-writes, live-telegram send + chunked, slash-title task lifecycle — covered by `test_messages.py`, `test_tasks.py`, and `test_integration_2.py`). The one unique test — cross-module event-ordering between `task.create` and `message.send` — moved into `test_integration_2.py`. Plus terse module docstrings on 10 test files that lacked them. Net: −1 file, −274 lines on the delete; +116 lines across 11 modified. (`6c11a2c` #139)
+- **`seed_agent` docstring clarification.** The spec dir provides SOUL/MISSION but `AGENTS.md` comes from `templates/agents/<spec.role>/` — a `spec.name ≠ spec.role` pair (e.g. monitor spec with `role: explorer`) is the intended seam, not a bug. Noted in `seed_agent()` so the next session reading the source doesn't spend triage budget on it. (`98d9021`)
 
-**Drift-check note.** Live agents seeded before this PR carry their
-old spec name in `~/.metasphere/agents/<id>/spec`. `metasphere update`
-drift-check returns `None` for one tick on those agents until the
-next `metasphere agent seed` rewrites the sidecar. Behaviour is
-otherwise unaffected.
+Audit report: `metasphere audit-docs --project metasphere-agents` (run 2026-06-03).
 
 ---
 
