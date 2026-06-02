@@ -25,7 +25,7 @@ Walk the user through a new project in natural language. Gather, in order:
 1. **Name** (required, kebab-case suggested).
 2. **Path on disk** — default `$PWD/<name>`. If the user gives a git URL, treat it as `--repo` and ask where to clone it (default `~/Code/<name>`).
 3. **Goal** — one sentence about what the project is trying to achieve.
-4. **Members** — which persistent agents belong here? Default: just `@orchestrator`. Offer common roles (`@reviewer-quality`, `@researcher`). For each, ask whether they should be persistent.
+4. **Members** — which persistent agents belong here? Default: just `@orchestrator`. Offer common roles (`@critic-quality`, `@researcher`). For each, ask whether they should be persistent.
 5. **Optional links** — GitHub issues URL, Linear team, anything the user mentions.
 
 Then issue these commands in order, **showing each one before running it**:
