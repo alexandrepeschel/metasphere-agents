@@ -135,8 +135,8 @@ def test_frontmatter_sigil_roundtrip(tmp_path):
 
 # --- Escape-doubling regression (P0 2026-04-16) ----------------------------
 #
-# A task titled "Sunset /projects/writing-openclaw/ — operator directive.\n
-# FACTS:\n..." grew to 2.6MB of backslashes after ~30 consolidate ticks.
+# A task title with embedded "\n FACTS:\n..." grew to 2.6MB of
+# backslashes after ~30 consolidate ticks.
 # Root cause: _format_scalar used json.dumps to write strings with
 # "needs quoting" chars, but _parse_scalar stripped the outer quotes
 # WITHOUT running json.loads — so each write-read-write cycle doubled

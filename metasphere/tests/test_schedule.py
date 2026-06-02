@@ -319,7 +319,7 @@ def test_extract_messages_send_target_canonical_metasphere_msg():
     )
     assert (
         _sched._extract_messages_send_target(
-            '/home/openclaw/.metasphere/bin/metasphere msg send '
+            '/home/alice/.metasphere/bin/metasphere msg send '
             '@research-brand !task "scan"'
         )
         == "@research-brand"

@@ -66,10 +66,10 @@ def test_template_no_operator_paths(daemon):
     """Templates must not bake operator-specific paths.
 
     Heuristic from CLAUDE.md: "would this string be wrong on a
-    stranger's install?" /home/openclaw and rage-substrate would.
+    stranger's install?" Any operator-specific `/home/<user>` or
+    project-checkout name would.
     """
     tmpl = (TEMPLATE_DIR / f"metasphere-{daemon}.service").read_text()
-    assert "/home/openclaw" not in tmpl
     assert "rage-substrate" not in tmpl
     assert "/home/" not in tmpl, (
         f"{daemon}.service has a /home/ path — use %h or @@METASPHERE_DIR@@"
