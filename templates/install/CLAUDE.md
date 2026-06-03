@@ -284,9 +284,11 @@ visibility).
 ## Slash commands (in Claude Code)
 
 ```bash
-/project new|list|show|wake|chat   # Manage projects
-/session restart|status            # Restart orchestrator REPL
-/team review|research|implement|plan  # Invoke agent teams
+/project new|list|show|wake|chat                     # Manage projects
+/session restart|status                              # Restart orchestrator REPL
+/team review|research|implement|plan|monitor         # Invoke a single-role agent
+/team assemble <project> [specs...]                  # Seed + wake multiple agents
+/team status|specs                                   # Inspect team members / available specs
 ```
 
 ## Message labels
