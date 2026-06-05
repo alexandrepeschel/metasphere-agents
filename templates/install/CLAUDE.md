@@ -186,6 +186,10 @@ Teams are spawned via slash commands in Claude Code (no
 /team research   # research team for an open question
 /team implement  # implementation team for a planned feature
 /team plan       # planning team for an undefined initiative
+/team monitor    # monitoring/exploration agent on a target
+/team assemble <project> [specs...]   # seed + wake a full team
+/team status     # show team members and their status
+/team specs      # list available agent specs
 ```
 
 Team members live at `~/.metasphere/agents/@<role>-<project>/`.
