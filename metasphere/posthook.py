@@ -127,10 +127,20 @@ def should_skip_silent_tick(text: str | None) -> bool:
     # Match the standardized idle token and common variants at the start.
     if _IDLE_PATTERN.match(stripped):
         return True
-    # Also strip any trailing-idle token: if the entire turn collapses to
-    # empty after the trailer is removed, treat it as a silent tick (e.g.
-    # the agent emitted just ``[idle]\n[idle]`` or whitespace + trailer).
-    if not _strip_trailing_idle(stripped):
+    # Trailing ``[idle]`` after preceding prose ALSO suppresses the turn
+    # entirely (not just the trailer). Julian directive 2026-06-07 21:21Z:
+    # genuinely-Julian-facing surfaces go through explicit
+    # ``metasphere telegram send`` — pane prose is harness-internal. When
+    # an agent emits ``<prose>\n\n[idle]``, the trailer is the agent's
+    # own signal that the prose was an internal triage note, not
+    # operator-facing content. The previous behaviour (strip trailer,
+    # forward prose) caused the same noise the bare-``[idle]`` rule was
+    # designed to prevent — one-line triage narrations like "Routine —
+    # marking done" leaking to Telegram. Now any trailing-``[idle]`` =
+    # full suppression. The trailer is unambiguous (self-delimiting); the
+    # narrower free-form variants (``standing by``, ``idle.``) are NOT
+    # treated as trailers — those still need to be at turn start.
+    if _TRAILING_IDLE_PATTERN.search(stripped):
         return True
     return False
 
@@ -312,11 +322,12 @@ def route_to_telegram(text: str, paths: Paths) -> None:
     if not text:
         return
 
-    # Strip trailing-idle tokens so substantive prose forwards cleanly
-    # without a dangling ``[idle]`` (the start-anchored ``_IDLE_PATTERN``
-    # only catches BARE turns; agents emitting ``<prose>\n\n[idle]`` got
-    # past it). If the trailer-strip leaves nothing, the turn was all
-    # silence after all — drop it.
+    # Defense-in-depth: the primary gate is ``should_skip_silent_tick``
+    # in the Stop-hook caller, which now suppresses ANY turn containing
+    # a trailing ``[idle]`` (per Julian directive 2026-06-07 21:21Z).
+    # The strip here remains as a belt-and-braces guard against direct
+    # ``route_to_telegram`` callers that bypass the silent-tick gate —
+    # if a trailer slips through, strip it; if nothing remains, drop.
     text = _strip_trailing_idle(text.strip())
     if not text:
         return
