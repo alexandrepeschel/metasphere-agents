@@ -10,7 +10,7 @@ Environment=METASPHERE_DIR=@@METASPHERE_DIR@@
 Environment=METASPHERE_PROJECT_ROOT=@@METASPHERE_PROJECT_ROOT@@
 Environment=METASPHERE_REPO_ROOT=@@METASPHERE_PROJECT_ROOT@@
 Environment=PATH=@@METASPHERE_DIR@@/bin:%h/.local/bin:/usr/local/bin:/usr/bin:/bin
-ExecStart=@@METASPHERE_VENV_BIN@@ gateway daemon 5
+ExecStart=@@METASPHERE_VENV_BIN@@ gateway daemon
 Restart=always
 RestartSec=5
 StandardOutput=append:@@METASPHERE_DIR@@/logs/gateway.log

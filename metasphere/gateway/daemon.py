@@ -45,7 +45,7 @@ def _default_adapters() -> List[SurfaceAdapter]:
 
 
 def _poll_once(
-    timeout: int = 1,
+    timeout: int = 25,
     *,
     adapters: Optional[List[SurfaceAdapter]] = None,
 ) -> int:
@@ -57,11 +57,16 @@ def _poll_once(
     that way the same adapter instances drive every tick (matters
     for any adapter that holds connection state).
 
+    ``timeout=25``: Telegram holds the connection open for up to 25s
+    when there are no pending updates, returning immediately when a
+    message arrives. Combined with no inter-poll sleep this gives
+    sub-second message delivery in the happy path.
+
     ``adapters=None`` falls back to :func:`_default_adapters`. That
-    branch keeps the bare ``gw_daemon._poll_once(timeout=1)`` test
-    seam working for callers that don't care about instance identity
-    (the existing photo-routing tests, which monkeypatch the
-    poller/api layer underneath).
+    branch keeps the bare ``gw_daemon._poll_once()`` test seam working
+    for callers that don't care about instance identity (the existing
+    photo-routing tests, which monkeypatch the poller/api layer
+    underneath).
     """
     if adapters is None:
         adapters = _default_adapters()
@@ -73,7 +78,7 @@ def _poll_once(
 
 def run_daemon(
     paths: Optional[Paths] = None,
-    poll_interval: float = 3.0,
+    poll_interval: float = 0.5,
     watchdog_interval: float = 5.0,
     dormancy_interval: float = 300.0,
     dormancy_max_idle_seconds: int = 86400,
