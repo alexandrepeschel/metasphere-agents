@@ -19,7 +19,8 @@ Commands:
   (no args)                    One-shot tick (alias for `once`).
   once                         One-shot tick.
   check                        One-shot tick.
-  daemon [<interval-seconds>]  Run forever; default interval 30s.
+  daemon [<interval-seconds>]  Run forever; default interval 300s
+                               (5 minutes, matches the systemd unit).
 
 Options:
   --invoke-agent               Inject the per-turn context block into
@@ -58,7 +59,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args[0] == "daemon":
-        interval = 30
+        interval = 300
         if len(args) > 1:
             raw = args[1]
             if raw in ("--help", "-h"):

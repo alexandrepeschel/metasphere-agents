@@ -384,7 +384,7 @@ def heartbeat_once(paths: Paths | None = None, invoke_agent: bool = False) -> No
 
 def heartbeat_daemon(
     paths: Paths | None = None,
-    interval_seconds: int = 30,
+    interval_seconds: int = 300,
     invoke_agent: bool = False,
 ) -> None:
     """Run :func:`heartbeat_once` forever on ``interval_seconds`` cadence.
