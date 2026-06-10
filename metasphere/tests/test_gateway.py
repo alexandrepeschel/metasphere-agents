@@ -162,6 +162,97 @@ def test_safety_hooks_ignores_prose_listing(tmp_paths: Paths):
     assert send.call_count == 0
 
 
+# ---------------------------------------------------------------------------
+# Watchdog: context limit auto-compact
+# ---------------------------------------------------------------------------
+
+def test_check_context_limit_detects_and_injects_compact(tmp_paths: Paths):
+    """When the pane shows the context-limit banner, /compact + Enter are
+    sent and the function returns True."""
+    pane = (
+        "⎿  Context limit reached · /compact or /clear to continue\n"
+        "❯ "
+    )
+    with patch.object(gw_watchdog, "session_alive", return_value=True), \
+         patch.object(gw_watchdog, "_capture_pane", return_value=pane), \
+         patch.object(gw_watchdog, "_send_keys") as send, \
+         patch("time.sleep"):
+        result = gw_watchdog.check_context_limit(paths=tmp_paths, now=5000)
+    assert result is True
+    # Two sends: "/compact" then "Enter"
+    assert send.call_count == 2
+    calls = [c.args for c in send.call_args_list]
+    assert any("/compact" in c for c in calls), f"expected /compact in {calls}"
+    assert any("Enter" in c for c in calls), f"expected Enter in {calls}"
+
+
+def test_check_context_limit_rate_limited(tmp_paths: Paths):
+    """A second trigger within 10 minutes must be suppressed."""
+    pane = "Context limit reached · /compact or /clear to continue\n❯ "
+    marker = tmp_paths.state / "last_context_limit_compact"
+    marker.parent.mkdir(parents=True, exist_ok=True)
+    marker.write_text("5000")
+    with patch.object(gw_watchdog, "session_alive", return_value=True), \
+         patch.object(gw_watchdog, "_capture_pane", return_value=pane), \
+         patch.object(gw_watchdog, "_send_keys") as send:
+        # 60s later — well inside the 600s rate limit
+        result = gw_watchdog.check_context_limit(paths=tmp_paths, now=5060)
+    assert result is False
+    assert send.call_count == 0
+
+
+def test_check_context_limit_allowed_after_rate_limit_window(tmp_paths: Paths):
+    """After 10+ minutes the check must fire again."""
+    pane = "Context limit reached · /compact or /clear to continue\n❯ "
+    marker = tmp_paths.state / "last_context_limit_compact"
+    marker.parent.mkdir(parents=True, exist_ok=True)
+    marker.write_text("5000")
+    with patch.object(gw_watchdog, "session_alive", return_value=True), \
+         patch.object(gw_watchdog, "_capture_pane", return_value=pane), \
+         patch.object(gw_watchdog, "_send_keys") as send, \
+         patch("time.sleep"):
+        # 601s later — just past the 600s window
+        result = gw_watchdog.check_context_limit(paths=tmp_paths, now=5601)
+    assert result is True
+    assert send.call_count == 2
+
+
+def test_check_context_limit_no_banner_no_action(tmp_paths: Paths):
+    """Clean pane must not trigger the check."""
+    pane = "❯ Tell me about the project.\n"
+    with patch.object(gw_watchdog, "session_alive", return_value=True), \
+         patch.object(gw_watchdog, "_capture_pane", return_value=pane), \
+         patch.object(gw_watchdog, "_send_keys") as send:
+        result = gw_watchdog.check_context_limit(paths=tmp_paths, now=9000)
+    assert result is False
+    assert send.call_count == 0
+
+
+def test_check_context_limit_skips_dead_session(tmp_paths: Paths):
+    """Dead session must skip immediately without any tmux calls."""
+    with patch.object(gw_watchdog, "session_alive", return_value=False), \
+         patch.object(gw_watchdog, "_capture_pane") as cap, \
+         patch.object(gw_watchdog, "_send_keys") as send:
+        result = gw_watchdog.check_context_limit(paths=tmp_paths, now=9000)
+    assert result is False
+    cap.assert_not_called()
+    assert send.call_count == 0
+
+
+def test_check_context_limit_writes_marker(tmp_paths: Paths):
+    """After a successful compact injection, the rate-limit marker must be
+    written so the next tick within the window is suppressed."""
+    pane = "Context limit reached\n❯ "
+    marker = tmp_paths.state / "last_context_limit_compact"
+    with patch.object(gw_watchdog, "session_alive", return_value=True), \
+         patch.object(gw_watchdog, "_capture_pane", return_value=pane), \
+         patch.object(gw_watchdog, "_send_keys"), \
+         patch("time.sleep"):
+        gw_watchdog.check_context_limit(paths=tmp_paths, now=7000)
+    assert marker.exists(), "rate-limit marker must be written after injection"
+    assert marker.read_text().strip() == "7000"
+
+
 def test_check_restart_marker_uses_project_scoped_session(tmp_paths: Paths):
     """Regression: post-restart wake-up injection for a project-scoped
     agent must target ``metasphere-<project>-<agent>``, not the bare

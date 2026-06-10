@@ -1,6 +1,6 @@
 """Stuck-prompt recovery for the orchestrator session.
 
-Two failure modes handled:
+Three failure modes handled:
 
 1. **Stuck pasted-text placeholder.** Bracketed-paste race occasionally
    leaves ``[Pasted text #N +M lines]`` in the pane with the Enter
@@ -9,8 +9,13 @@ Two failure modes handled:
    ``Do you want to proceed?`` with a numbered ``1. Yes`` option. We
    auto-send ``1`` + Enter, rate-limited to once every 10s so we never
    spam.
+3. **Context limit reached.** When Claude's context window fills up,
+   the TUI shows ``Context limit reached · /compact or /clear to
+   continue`` and stops processing messages silently. We inject
+   ``/compact`` to compress the conversation into a summary and resume,
+   rate-limited to once every 10 minutes to avoid loops.
 
-Both checks are pure functions of capture-pane output + filesystem
+All checks are pure functions of capture-pane output + filesystem
 state. ``run_watchdog`` composes them.
 """
 
@@ -39,6 +44,7 @@ _SAFETY_HOOKS_OPTION_RE = re.compile(r"^\s*1\.\s+Yes\b", re.MULTILINE)
 
 _STUCK_PASTE_THRESHOLD_S = 15
 _SAFETY_HOOKS_RATE_LIMIT_S = 10
+_CONTEXT_LIMIT_RATE_LIMIT_S = 600  # 10 minutes
 
 
 def _tmux_bin() -> str:
@@ -161,6 +167,53 @@ def check_safety_hooks_confirmation(
     except Exception:
         pass
     _send_keys(session_name, "1")
+    time.sleep(0.2)
+    _send_keys(session_name, "Enter")
+    _write_int(marker, now)
+    return True
+
+
+def check_context_limit(
+    session_name: str = SESSION_NAME,
+    paths: Optional[Paths] = None,
+    *,
+    now: Optional[int] = None,
+) -> bool:
+    """Detect the ``Context limit reached`` banner and auto-compact.
+
+    When Claude's context window is full the TUI displays::
+
+        Context limit reached · /compact or /clear to continue
+
+    and stops processing new messages silently. This check injects
+    ``/compact`` (which summarises the conversation and resumes) rather
+    than doing a hard restart, so no conversational context is lost.
+
+    Rate-limited to once every 10 minutes via a state-file marker to
+    prevent rapid-fire loops if compaction itself fails. Returns True
+    if ``/compact`` was injected.
+    """
+    paths = paths or resolve()
+    if not session_alive(session_name):
+        return False
+    pane = _capture_pane(session_name)
+    if "Context limit reached" not in pane:
+        return False
+    marker = paths.state / "last_context_limit_compact"
+    now = now if now is not None else int(time.time())
+    last = _read_int(marker)
+    if now - last < _CONTEXT_LIMIT_RATE_LIMIT_S:
+        return False
+    try:
+        log_event(
+            "supervisor.context_limit_compact",
+            f"[watchdog] context limit detected in {session_name}, injecting /compact",
+            agent="@daemon-supervisor",
+            paths=paths,
+        )
+    except Exception:
+        pass
+    _send_keys(session_name, "/compact")
     time.sleep(0.2)
     _send_keys(session_name, "Enter")
     _write_int(marker, now)
@@ -300,8 +353,8 @@ def run_watchdog(paths: Optional[Paths] = None) -> None:
     """Run all stuck-prompt checks across ALL active agent sessions.
 
     Enumerates all ``metasphere-*`` tmux sessions and runs per-session
-    checks (stuck paste, safety hooks). Then scans for per-agent restart
-    markers independently.
+    checks (stuck paste, safety hooks, context limit). Then scans for
+    per-agent restart markers independently.
 
     Failures of one check do not abort the others. This is the only
     watchdog entry point the daemon calls.
@@ -311,7 +364,7 @@ def run_watchdog(paths: Optional[Paths] = None) -> None:
     # Per-session checks: run against every live metasphere-* session.
     sessions = _all_session_names()
     for session_name in sessions:
-        for fn in (check_stuck_paste, check_safety_hooks_confirmation):
+        for fn in (check_stuck_paste, check_safety_hooks_confirmation, check_context_limit):
             try:
                 fn(session_name, paths)
             except Exception as e:  # pragma: no cover - defensive
