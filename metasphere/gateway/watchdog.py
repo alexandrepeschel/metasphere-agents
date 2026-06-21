@@ -32,6 +32,7 @@ from ..events import log_event
 from ..paths import Paths, resolve
 from ..session import list_sessions
 from .session import SESSION_NAME, session_alive
+from ..tmux import submit_to_tmux
 
 _PASTE_RE = re.compile(r"\[Pasted text #\d+")
 # Require BOTH a confirm-class line AND a "1. Yes" option line so prose
@@ -41,6 +42,18 @@ _SAFETY_HOOKS_PROMPT_RE = re.compile(
     r"(Do you want to proceed\?|\[plugin:safety-hooks\])",
 )
 _SAFETY_HOOKS_OPTION_RE = re.compile(r"^\s*1\.\s+Yes\b", re.MULTILINE)
+# Anchor the context-limit match to the FULL banner on a single line —
+# both the ``Context limit reached`` head and the ``/compact or /clear``
+# tail — so the bare phrase appearing in scrollback (e.g. an earlier
+# banner that has since been compacted away, or the phrase echoed in
+# normal output) does not re-fire the check. Mirrors the two-correlated-
+# signals discipline of the safety-hooks match above.
+_CONTEXT_LIMIT_RE = re.compile(
+    r"Context limit reached\b.*?/compact\s+or\s+/clear",
+)
+# Only inspect the live banner region: the prompt/banner sits at the
+# bottom of the pane, so we restrict the match to the last few lines.
+_CONTEXT_LIMIT_TAIL_LINES = 8
 
 _STUCK_PASTE_THRESHOLD_S = 15
 _SAFETY_HOOKS_RATE_LIMIT_S = 10
@@ -197,12 +210,35 @@ def check_context_limit(
     if not session_alive(session_name):
         return False
     pane = _capture_pane(session_name)
-    if "Context limit reached" not in pane:
+    # Match the full banner (head + ``/compact or /clear`` tail) and only
+    # in the live banner region at the bottom of the pane, so stale
+    # scrollback can't re-fire after a successful compact.
+    tail = "\n".join(pane.splitlines()[-_CONTEXT_LIMIT_TAIL_LINES:])
+    if not _CONTEXT_LIMIT_RE.search(tail):
         return False
     marker = paths.state / "last_context_limit_compact"
     now = now if now is not None else int(time.time())
     last = _read_int(marker)
     if now - last < _CONTEXT_LIMIT_RATE_LIMIT_S:
+        return False
+    # Route through the guarded submit path (defer_if_busy=True) so we
+    # never interleave the ``/compact`` command with a human mid-typing
+    # in the pane, and escape_prefix=False so we don't interrupt a
+    # running tool. submit_to_tmux types the command and submits with a
+    # raw ``C-m`` byte — the tmux ``Enter`` keysym does NOT reliably
+    # submit in Claude Code's Ink/React TUI (see metasphere.tmux), so a
+    # bare ``Enter`` would type ``/compact`` but never send it while the
+    # rate-limit marker still advanced, freezing the session for the full
+    # rate-limit window per attempt.
+    submitted = submit_to_tmux(
+        session_name,
+        "/compact",
+        defer_if_busy=True,
+        escape_prefix=False,
+    )
+    if not submitted:
+        # Deferred (human typing / busy pane) or submit failed — do NOT
+        # write the marker, so the next tick retries once the pane frees.
         return False
     try:
         log_event(
@@ -213,9 +249,6 @@ def check_context_limit(
         )
     except Exception:
         pass
-    _send_keys(session_name, "/compact")
-    time.sleep(0.2)
-    _send_keys(session_name, "Enter")
     _write_int(marker, now)
     return True
 

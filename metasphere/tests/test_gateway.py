@@ -167,87 +167,153 @@ def test_safety_hooks_ignores_prose_listing(tmp_paths: Paths):
 # ---------------------------------------------------------------------------
 
 def test_check_context_limit_detects_and_injects_compact(tmp_paths: Paths):
-    """When the pane shows the context-limit banner, /compact + Enter are
-    sent and the function returns True."""
+    """When the pane shows the full context-limit banner, ``/compact`` is
+    submitted via the guarded submit path and the function returns True."""
     pane = (
-        "⎿  Context limit reached · /compact or /clear to continue\n"
-        "❯ "
+        "\u23bf  Context limit reached \u00b7 /compact or /clear to continue\n"
+        "\u276f "
     )
     with patch.object(gw_watchdog, "session_alive", return_value=True), \
          patch.object(gw_watchdog, "_capture_pane", return_value=pane), \
-         patch.object(gw_watchdog, "_send_keys") as send, \
-         patch("time.sleep"):
+         patch.object(gw_watchdog, "submit_to_tmux", return_value=True) as submit:
         result = gw_watchdog.check_context_limit(paths=tmp_paths, now=5000)
     assert result is True
-    # Two sends: "/compact" then "Enter"
-    assert send.call_count == 2
-    calls = [c.args for c in send.call_args_list]
-    assert any("/compact" in c for c in calls), f"expected /compact in {calls}"
-    assert any("Enter" in c for c in calls), f"expected Enter in {calls}"
+    # Exactly one guarded submit, with the raw /compact command and the
+    # auto-injector flags (defer on typing, never interrupt a running turn).
+    assert submit.call_count == 1
+    args, kwargs = submit.call_args
+    assert args[1] == "/compact", f"expected /compact payload, got {args!r}"
+    assert kwargs.get("defer_if_busy") is True
+    assert kwargs.get("escape_prefix") is False
+
+
+def test_check_context_limit_uses_cm_submit_not_enter_keysym(tmp_paths: Paths):
+    """Regression: the check must NOT use a bare tmux ``Enter`` keysym to
+    submit — it routes through submit_to_tmux, which submits with a raw
+    ``C-m`` byte (the Enter keysym no-ops in Claude Code's Ink TUI). We
+    assert no raw _send_keys("Enter") leaks through."""
+    pane = "Context limit reached \u00b7 /compact or /clear to continue\n\u276f "
+    with patch.object(gw_watchdog, "session_alive", return_value=True), \
+         patch.object(gw_watchdog, "_capture_pane", return_value=pane), \
+         patch.object(gw_watchdog, "submit_to_tmux", return_value=True), \
+         patch.object(gw_watchdog, "_send_keys") as send:
+        result = gw_watchdog.check_context_limit(paths=tmp_paths, now=5000)
+    assert result is True
+    # No raw send-keys "Enter" — submission is delegated to submit_to_tmux.
+    send.assert_not_called()
 
 
 def test_check_context_limit_rate_limited(tmp_paths: Paths):
     """A second trigger within 10 minutes must be suppressed."""
-    pane = "Context limit reached · /compact or /clear to continue\n❯ "
+    pane = "Context limit reached \u00b7 /compact or /clear to continue\n\u276f "
     marker = tmp_paths.state / "last_context_limit_compact"
     marker.parent.mkdir(parents=True, exist_ok=True)
     marker.write_text("5000")
     with patch.object(gw_watchdog, "session_alive", return_value=True), \
          patch.object(gw_watchdog, "_capture_pane", return_value=pane), \
-         patch.object(gw_watchdog, "_send_keys") as send:
+         patch.object(gw_watchdog, "submit_to_tmux", return_value=True) as submit:
         # 60s later — well inside the 600s rate limit
         result = gw_watchdog.check_context_limit(paths=tmp_paths, now=5060)
     assert result is False
-    assert send.call_count == 0
+    submit.assert_not_called()
 
 
 def test_check_context_limit_allowed_after_rate_limit_window(tmp_paths: Paths):
     """After 10+ minutes the check must fire again."""
-    pane = "Context limit reached · /compact or /clear to continue\n❯ "
+    pane = "Context limit reached \u00b7 /compact or /clear to continue\n\u276f "
     marker = tmp_paths.state / "last_context_limit_compact"
     marker.parent.mkdir(parents=True, exist_ok=True)
     marker.write_text("5000")
     with patch.object(gw_watchdog, "session_alive", return_value=True), \
          patch.object(gw_watchdog, "_capture_pane", return_value=pane), \
-         patch.object(gw_watchdog, "_send_keys") as send, \
-         patch("time.sleep"):
+         patch.object(gw_watchdog, "submit_to_tmux", return_value=True) as submit:
         # 601s later — just past the 600s window
         result = gw_watchdog.check_context_limit(paths=tmp_paths, now=5601)
     assert result is True
-    assert send.call_count == 2
+    assert submit.call_count == 1
 
 
 def test_check_context_limit_no_banner_no_action(tmp_paths: Paths):
     """Clean pane must not trigger the check."""
-    pane = "❯ Tell me about the project.\n"
+    pane = "\u276f Tell me about the project.\n"
     with patch.object(gw_watchdog, "session_alive", return_value=True), \
          patch.object(gw_watchdog, "_capture_pane", return_value=pane), \
-         patch.object(gw_watchdog, "_send_keys") as send:
+         patch.object(gw_watchdog, "submit_to_tmux", return_value=True) as submit:
         result = gw_watchdog.check_context_limit(paths=tmp_paths, now=9000)
     assert result is False
-    assert send.call_count == 0
+    submit.assert_not_called()
+
+
+def test_check_context_limit_bare_phrase_without_tail_no_action(tmp_paths: Paths):
+    """The bare phrase ``Context limit reached`` without the
+    ``/compact or /clear`` tail (e.g. the agent typing the phrase in chat)
+    must NOT fire — the match requires both correlated signals."""
+    pane = (
+        "Let me explain what happens when the Context limit reached state\n"
+        "occurs in a long conversation.\n"
+        "\u276f "
+    )
+    with patch.object(gw_watchdog, "session_alive", return_value=True), \
+         patch.object(gw_watchdog, "_capture_pane", return_value=pane), \
+         patch.object(gw_watchdog, "submit_to_tmux", return_value=True) as submit:
+        result = gw_watchdog.check_context_limit(paths=tmp_paths, now=9000)
+    assert result is False
+    submit.assert_not_called()
+
+
+def test_check_context_limit_stale_banner_in_scrollback_no_refire(tmp_paths: Paths):
+    """A banner that has scrolled up out of the live tail region (e.g. an
+    earlier context-limit that was already compacted) must NOT re-fire —
+    the match is restricted to the last few lines of the pane."""
+    # Banner at the top, then > _CONTEXT_LIMIT_TAIL_LINES lines of fresh
+    # post-compact output pushing it out of the live region.
+    filler = "\n".join(f"normal output line {n}" for n in range(20))
+    pane = (
+        "\u23bf  Context limit reached \u00b7 /compact or /clear to continue\n"
+        + filler + "\n\u276f "
+    )
+    with patch.object(gw_watchdog, "session_alive", return_value=True), \
+         patch.object(gw_watchdog, "_capture_pane", return_value=pane), \
+         patch.object(gw_watchdog, "submit_to_tmux", return_value=True) as submit:
+        result = gw_watchdog.check_context_limit(paths=tmp_paths, now=9000)
+    assert result is False
+    submit.assert_not_called()
+
+
+def test_check_context_limit_deferred_when_busy_no_marker(tmp_paths: Paths):
+    """If submit_to_tmux defers (human typing / busy pane) it returns
+    False; the check must NOT write the rate-limit marker, so the next
+    tick retries once the pane frees."""
+    pane = "Context limit reached \u00b7 /compact or /clear to continue\n\u276f "
+    marker = tmp_paths.state / "last_context_limit_compact"
+    with patch.object(gw_watchdog, "session_alive", return_value=True), \
+         patch.object(gw_watchdog, "_capture_pane", return_value=pane), \
+         patch.object(gw_watchdog, "submit_to_tmux", return_value=False) as submit:
+        result = gw_watchdog.check_context_limit(paths=tmp_paths, now=9000)
+    assert result is False
+    assert submit.call_count == 1
+    assert not marker.exists(), "marker must NOT be written on a deferred submit"
 
 
 def test_check_context_limit_skips_dead_session(tmp_paths: Paths):
     """Dead session must skip immediately without any tmux calls."""
     with patch.object(gw_watchdog, "session_alive", return_value=False), \
          patch.object(gw_watchdog, "_capture_pane") as cap, \
-         patch.object(gw_watchdog, "_send_keys") as send:
+         patch.object(gw_watchdog, "submit_to_tmux") as submit:
         result = gw_watchdog.check_context_limit(paths=tmp_paths, now=9000)
     assert result is False
     cap.assert_not_called()
-    assert send.call_count == 0
+    submit.assert_not_called()
 
 
 def test_check_context_limit_writes_marker(tmp_paths: Paths):
     """After a successful compact injection, the rate-limit marker must be
     written so the next tick within the window is suppressed."""
-    pane = "Context limit reached\n❯ "
+    pane = "Context limit reached \u00b7 /compact or /clear to continue\n\u276f "
     marker = tmp_paths.state / "last_context_limit_compact"
     with patch.object(gw_watchdog, "session_alive", return_value=True), \
          patch.object(gw_watchdog, "_capture_pane", return_value=pane), \
-         patch.object(gw_watchdog, "_send_keys"), \
-         patch("time.sleep"):
+         patch.object(gw_watchdog, "submit_to_tmux", return_value=True):
         gw_watchdog.check_context_limit(paths=tmp_paths, now=7000)
     assert marker.exists(), "rate-limit marker must be written after injection"
     assert marker.read_text().strip() == "7000"
