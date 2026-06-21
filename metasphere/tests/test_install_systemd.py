@@ -108,7 +108,7 @@ def test_template_restartsec_matches_daemon(daemon, expected):
 @pytest.mark.parametrize(
     "daemon,expected_exec_tail",
     [
-        ("gateway", "gateway daemon 5"),
+        ("gateway", "gateway daemon"),
         ("heartbeat", "heartbeat daemon 300"),
         ("schedule", "schedule daemon"),
     ],

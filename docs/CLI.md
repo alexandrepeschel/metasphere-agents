@@ -417,7 +417,9 @@ Usage: metasphere gateway <command> [args...]
 Commands:
   daemon [<interval>]    Run the gateway daemon (Telegram poll +
                          orchestrator REPL watchdog). <interval>
-                         is the poll interval in seconds (default 3).
+                         is the inter-poll sleep in seconds (default 0.5;
+                         message latency is driven by the 25s long-poll
+                         timeout, not this value).
   inject "msg"           Inject <msg> directly into the orchestrator's
                          tmux session (bypasses Telegram).
   ensure                 Start the orchestrator session if it is not

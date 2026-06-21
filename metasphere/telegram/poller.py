@@ -178,7 +178,17 @@ ALLOWED_UPDATES = ("message", "edited_message", "message_reaction")
 
 
 def get_updates(offset: int = 0, timeout: int = 30) -> List[Update]:
-    """Single getUpdates call. Blocks up to ``timeout`` seconds."""
+    """Single getUpdates call. Blocks up to ``timeout`` seconds.
+
+    Invariant: the long-poll ``timeout`` (seconds Telegram holds the
+    connection open) MUST stay below ``api.DEFAULT_TIMEOUT`` (the HTTP
+    socket read timeout, currently 35s). ``api.call`` issues the request
+    with that socket timeout; if the long-poll window meets or exceeds
+    it, the socket aborts before Telegram returns, surfacing as a
+    spurious read timeout instead of an empty poll. Callers that raise
+    the long-poll window (e.g. the gateway's 25s tick) must keep a
+    safety margin under ``api.DEFAULT_TIMEOUT``.
+    """
     resp = api.call(
         "getUpdates",
         offset=offset,
