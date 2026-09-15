@@ -429,7 +429,7 @@ def cmd_session(args: str, ctx: Context) -> str:
     orchestrator tmux session so recovery does not depend on a responsive TUI.
 
     Subcommands:
-      restart  -> metasphere-gateway restart-orchestrator (default)
+      restart  -> metasphere.gateway.session.restart_session (default)
       status   -> systemctl --user status metasphere-gateway
     """
     usage = "Usage: /session [restart|status]"
