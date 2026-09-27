@@ -2684,6 +2684,40 @@ def test_on_done_delivered_absent_headless_session_still_completes(
     assert (d / "status").read_text().strip() == "complete: !done delivered"
 
 
+def test_on_done_delivered_closes_the_linked_backing_task(tmp_paths: Paths):
+    """The task spawn_ephemeral created must close on !done.
+
+    on_done_delivered deletes ``task_id``, which is the only pointer the
+    posthook's auto-close reads. Unless the task is closed here, every
+    scheduler-spawned ephemeral leaks a pending task.
+    """
+    from metasphere import tasks as _tasks
+
+    d = _make_ephemeral(tmp_paths, "@cron-job")
+    t = _tasks.create_task(
+        "run the cron job", "!normal", tmp_paths.scope, tmp_paths.project_root,
+        created_by="@scheduler", assigned_to="@cron-job",
+    )
+    (d / "task_id").write_text(t.id + "\n")
+
+    def fake_run(cmd, *args, **kwargs):
+        cp = MagicMock()
+        cp.stdout = ""
+        cp.stderr = ""
+        cp.returncode = 1 if "has-session" in cmd or "kill-session" in cmd else 0
+        return cp
+
+    with patch("metasphere.agents.subprocess.run", side_effect=fake_run):
+        agents.on_done_delivered("@cron-job", paths=tmp_paths)
+
+    assert _tasks._find_task_file(t.id, include_completed=False) is None
+    closed = _tasks._find_task_file(t.id)
+    assert closed is not None
+    ct = _tasks.Task.from_text(closed.read_text(), path=closed)
+    assert ct.status == _tasks.STATUS_COMPLETED
+    assert not (d / "task_id").exists()
+
+
 def test_on_done_delivered_persistent_does_NOT_kill_tmux(tmp_paths: Paths):
     """A persistent sender's !done is a strict no-op: tmux stays up,
     no status change, no pointer removal. Persistent lifecycle is

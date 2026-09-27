@@ -1744,6 +1744,24 @@ def on_done_delivered(sender: str, paths: Paths | None = None) -> Optional[str]:
             pass
         return None
 
+    # Close the backing task before the pointer to it goes. The posthook's
+    # auto_close_finished_task reads ``task_id``, so deleting it first left
+    # every scheduler-spawned ephemeral's task pending forever (14 leaked
+    # between 2026-09-23 and 09-27).
+    task_id = _read_text(agent_dir / "task_id").strip()
+    if task_id:
+        try:
+            from . import tasks as _tasks
+
+            if _tasks._find_task_file(task_id, include_completed=False) is not None:
+                _tasks.complete_task(
+                    task_id,
+                    f"auto-closed via !done from {agent_id}",
+                    paths.project_root,
+                )
+        except Exception:
+            pass
+
     # Clear runtime state pointers so a future spawn with the same name
     # bootstraps from scratch. Persona/contract/harness files survive.
     for name in ("pid", "task_id"):
