@@ -1613,6 +1613,16 @@ def reap_crashed(paths: Paths | None = None) -> list[str]:
                 tomb.unlink()
             except OSError:
                 pass
+            # The posthook's auto-close ran on the agent's last Stop tick,
+            # before this ``complete:`` existed, and a headless agent gets
+            # no later tick — so close the backing task here or it leaks
+            # (model-review and two check-ins, 2026-10-14..16).
+            try:
+                from .posthook import auto_close_finished_task
+
+                auto_close_finished_task(agent.name, paths)
+            except Exception:
+                pass
             try:
                 log_event(
                     "agent.exited",

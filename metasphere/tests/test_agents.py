@@ -2956,3 +2956,38 @@ def test_outbound_send_defeats_staleness(tmp_paths: Paths):
         "agent that sent bus traffic moments ago must not be stale"
     )
     assert idle is not None and idle < 120
+
+
+def test_reap_crashed_exit_self_closes_the_linked_backing_task(
+    tmp_paths: Paths,
+):
+    """A headless ephemeral that ends on ``exit-self`` gets ``complete:``
+    from the reaper, after its last Stop tick — so the posthook's
+    auto-close never saw it complete. The reaper must close the task, or
+    every exit-self cron run leaks one (2026-10-14..16)."""
+    from metasphere import tasks as _tasks
+
+    d = _seed_ephemeral_with_pid(
+        tmp_paths, "@cron-exit", pid=99999, parent="@scheduler",
+    )
+    t = _tasks.create_task(
+        "run the cron job", "!normal", tmp_paths.scope, tmp_paths.project_root,
+        created_by="@scheduler", assigned_to="@cron-exit",
+    )
+    (d / "task_id").write_text(t.id + "\n")
+    tomb = d / "exit_self"
+    tomb.write_text("2026-10-16T23:30:54Z session metasphere-cron-exit\n")
+    os.utime(d / "pid", (1000, 1000))
+    os.utime(tomb, (2000, 2000))
+
+    with patch("metasphere.agents._pid_alive", return_value=False), \
+         patch("metasphere.agents.session_alive", return_value=False), \
+         patch("metasphere.messages.send_message"):
+        agents.reap_crashed(paths=tmp_paths)
+
+    assert (d / "status").read_text().startswith("complete:")
+    assert _tasks._find_task_file(t.id, include_completed=False) is None
+    closed = _tasks._find_task_file(t.id)
+    assert closed is not None
+    ct = _tasks.Task.from_text(closed.read_text(), path=closed)
+    assert ct.status == _tasks.STATUS_COMPLETED
