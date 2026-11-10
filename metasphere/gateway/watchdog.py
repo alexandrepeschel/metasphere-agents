@@ -621,7 +621,10 @@ def _check_restart_marker(
 
     wake_msg = (
         f"[session restarted] agent: {agent}, reason: {reason}. "
-        "Check messages and tasks, resume where you left off."
+        "Check messages and tasks, resume where you left off. "
+        "Your reply text reaches the operator's Telegram: if there is "
+        "nothing new to do or report, reply with exactly `[idle]` and "
+        "do not describe the restart or the empty queue."
     )
     # defer_if_busy=True: post-restart wake is auto-fired. If a human
     # is at the freshly-respawned pane and typing, retain the marker and
