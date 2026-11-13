@@ -115,6 +115,25 @@ def _default_pending_inbound_writer(**kwargs) -> None:
         pass
 
 
+def _reply_to_line(msg: dict, limit: int = 120) -> str:
+    """Quote the message this one replies to, so the agent sees the referent.
+
+    The heartbeat excerpt already shows ``↩ replying to:``; the live inject
+    did not, so a reply to an older bot message read as a reply to the
+    newest one.
+    """
+    rt = msg.get("reply_to_message")
+    if not isinstance(rt, dict):
+        return ""
+    quoted = (rt.get("text") or rt.get("caption") or "").strip()
+    if not quoted:
+        return ""
+    quoted = " ".join(quoted.split())
+    if len(quoted) > limit:
+        quoted = quoted[:limit].rstrip() + "..."
+    return f'↩ replying to: "{quoted}"'
+
+
 def _explicit_reply_command(
     surface_id: str,
     chat_id: int,
@@ -256,6 +275,9 @@ def handle_update(
         return
 
     payload = body or ""
+    reply_line = _reply_to_line(msg)
+    if reply_line:
+        payload = f"{reply_line}\n{payload}" if payload else reply_line
     downloaded: list = []
     if refs:
         downloaded = attachments.download_attachments(
