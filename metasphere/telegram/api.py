@@ -322,11 +322,21 @@ def _http_post_multipart(url: str, fields: dict, file_field: str, file_path: str
         headers={"Content-Type": f"multipart/form-data; boundary={boundary}"},
         method="POST",
     )
-    try:
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
-            payload = resp.read().decode("utf-8")
-    except urllib.error.HTTPError as e:
-        payload = e.read().decode("utf-8", errors="replace")
+    # One retry on a network-level failure: the Telegram path from this
+    # host drops out for minutes at a time (same window shows up as
+    # gateway poll timeouts), and a 30 KB voice note failing outright on
+    # the first stall is worse than the small risk of a duplicate upload.
+    for attempt in (1, 2):
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                payload = resp.read().decode("utf-8")
+            break
+        except urllib.error.HTTPError as e:
+            payload = e.read().decode("utf-8", errors="replace")
+            break
+        except (urllib.error.URLError, TimeoutError, ConnectionError):
+            if attempt == 2:
+                raise
     try:
         return json.loads(payload)
     except json.JSONDecodeError as e:
@@ -336,8 +346,12 @@ def _http_post_multipart(url: str, fields: dict, file_field: str, file_path: str
 def send_document(chat_id: int | str, file_path: str,
                   caption: Optional[str] = None,
                   filename: Optional[str] = None,
-                  surface_id: Optional[str] = None) -> dict:
+                  surface_id: Optional[str] = None,
+                  voice: bool = False) -> dict:
     """Upload ``file_path`` to ``chat_id`` via sendDocument.
+
+    With ``voice=True`` it goes through sendVoice instead, so an
+    OGG/Opus file renders as a playable voice note rather than a file.
 
     Args:
         chat_id: target chat.
@@ -348,14 +362,15 @@ def send_document(chat_id: int | str, file_path: str,
         surface_id: which Telegram bot to send through (per-bot tokens).
     """
     cfg = _config(surface_id)
-    url = f"{cfg.api_base}/sendDocument"
+    method, field = ("sendVoice", "voice") if voice else ("sendDocument", "document")
+    url = f"{cfg.api_base}/{method}"
     name = filename or file_path.rsplit("/", 1)[-1]
     fields = {"chat_id": str(chat_id)}
     if caption:
         fields["caption"] = caption
-    resp = _http_post_multipart(url, fields, "document", file_path, name)
+    resp = _http_post_multipart(url, fields, field, file_path, name)
     if not resp.get("ok"):
-        raise TelegramAPIError("sendDocument", resp.get("description", "unknown error"), resp)
+        raise TelegramAPIError(method, resp.get("description", "unknown error"), resp)
     return resp
 
 
@@ -400,6 +415,7 @@ def send_with_cc(
     caption: Optional[str] = None,
     filename: Optional[str] = None,
     surface_id: Optional[str] = None,
+    voice: bool = False,
 ) -> List[dict] | dict:
     """Single choke-point wrapper that sends to Telegram AND mirrors
     the content into @orchestrator's inbox as !info when the sender
@@ -420,8 +436,10 @@ def send_with_cc(
         resp = send_document(
             chat_id, document_path,
             caption=caption, filename=filename, surface_id=surface_id,
+            voice=voice,
         )
-        cc_body = caption if caption else f"[sent document: {document_path}]"
+        kind = "voice note" if voice else "document"
+        cc_body = caption if caption else f"[sent {kind}: {document_path}]"
         _cc_outbound_to_orchestrator(cc_body)
         return resp
 

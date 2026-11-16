@@ -27,7 +27,7 @@ Commands:
                                    via setMyCommands.
   send-document <path> [--caption ...] [--filename ...] [--chat-id ...]
                                    Upload a file to the chat via
-                                   sendDocument.
+                                   sendDocument (--voice: sendVoice).
   groups <subcommand> ...          See `metasphere telegram groups
                                    --help` for thread/topic management.
 
@@ -315,7 +315,7 @@ def cmd_send_document(args: argparse.Namespace) -> int:
         caption = f"[{agent.lstrip('@')}] {caption}"
     resp = api.send_with_cc(
         chat_id, document_path=args.path, caption=caption, filename=args.filename,
-        surface_id=_own_telegram_surface_id(agent),
+        surface_id=_own_telegram_surface_id(agent), voice=args.voice,
     )
     # Same dedupe-marker treatment as text sends — the user already got the
     # file, so the Stop hook should not also forward the assistant text.
@@ -327,7 +327,8 @@ def cmd_send_document(args: argparse.Namespace) -> int:
             mark_orchestrator_explicit_send(_paths.resolve())
         except Exception:  # noqa: BLE001
             pass
-    print(f"Sent {args.path} to {chat_id} via {agent} (file_id={resp.get('result',{}).get('document',{}).get('file_id','?')})")
+    kind = "voice" if args.voice else "document"
+    print(f"Sent {args.path} to {chat_id} via {agent} (file_id={resp.get('result',{}).get(kind,{}).get('file_id','?')})")
     return 0
 
 
@@ -369,6 +370,8 @@ def build_parser() -> argparse.ArgumentParser:
     p_doc.add_argument("--caption", default=None, help="optional caption shown beneath the file")
     p_doc.add_argument("--filename", default=None, help="override the displayed filename")
     p_doc.add_argument("--chat-id", type=int, default=None)
+    p_doc.add_argument("--voice", action="store_true",
+                       help="send via sendVoice so an OGG/Opus file plays as a voice note")
     p_doc.set_defaults(func=cmd_send_document)
 
     return p
