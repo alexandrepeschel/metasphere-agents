@@ -20,7 +20,7 @@ Telegram strips formatting Alex pastes (numbered lists) and its topics make clut
 
 ## Secrets and config
 - Bot account: `~/.metasphere/secrets/matrix-clay.json` (keys: account, homeserver, login, password, user_id). Log in once, store the access token beside it (`matrix-clay.token`, mode 600), never print the password.
-- Alex's Matrix ID: ask Alex (pending). The bot creates a DM room, invites him, stores the room_id in config.
+- Alex's Matrix ID: `@alexandre_peschel:matrix.org`. DM room and access token: see `~/.metasphere/secrets/matrix-clay.token` and `~/.metasphere/config/matrix.env` (created 17 Nov by the orchestrator). Bot is `@hey-clay:matrix.org`, homeserver `https://matrix-client.matrix.org`. Password login needs the localpart `hey-clay`; the email in matrix-clay.json `login` is rejected as an identifier. The DM room exists and Alex is invited.
 
 ## Done means
 - Unit tests for api/poller/handler/routing pass, existing suites still pass.
