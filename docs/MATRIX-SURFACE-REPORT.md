@@ -37,7 +37,7 @@ What I did (reversible, nothing deleted):
 
 - New: 65 tests in `test_matrix_api.py` (19), `test_matrix_routing.py` (4), `test_matrix_handler.py` (20), `test_matrix_poller.py` (10), `test_matrix_adapter.py` (12: adapter, daemon discovery, message CLI, matrix CLI, posthook routing and ack).
 - Full suite first run: 2461 passed, 4 failed. The 4 were `test_default_adapters_*` picking up the host's real `matrix.env`; fixed with an autouse fixture in `test_gateway.py` and `test_gateway_adapter.py`.
-- FULL_SUITE_RESULT_PLACEHOLDER
+- Final full suite (after all changes): **2467 passed, 0 failed** (2 deselected by repo config), 321 s.
 
 ## Files changed
 
@@ -47,13 +47,38 @@ Outside the repo (host state, all backed up as `<file>.bak-20261118`, **not comm
 - `~/.metasphere/config/matrix.env`, `~/.metasphere/ADDRESSBOOK.yaml`, `~/.metasphere/ASKS.md`
 - `~/.metasphere/lib/tg_html.py` (`bin/tg-html` is a symlink to it): now surface-aware. If the orchestrator's pin is Matrix it sends the same sanitized HTML to Alex's Matrix DM (Element renders b/i/a/code), otherwise Telegram exactly as before. This covers every prompt and cron that calls `tg-html` (the scheduler `jobs.json` entries and `index_brief.py`, `asks_nudge.py`) without editing them.
 - Prompts and scripts where the send line was changed to `metasphere message send --surface auto --to alex` (24 files, 29 replacements; the old forms were `--surface telegram --chat-id 11714502`, `metasphere telegram send [--to alex]`):
-REWIRED_PATHS_PLACEHOLDER
+- `~/.metasphere/ADDRESSBOOK.yaml`
+- `~/.metasphere/gmail-inbox-monitor-prompt.md`
+- `~/.metasphere/lib/crm_watch_ame.py`
+- `~/.metasphere/lib/tg_html.py`
+- `~/.metasphere/projects/900s/weekly-research-prompt.md`
+- `~/.metasphere/projects/assembly/approach-prompt.md`
+- `~/.metasphere/projects/seismograph/brief-writer-prompt.md`
+- `~/.metasphere/projects/seismograph/monitor-prompt.md`
+- `~/.metasphere/projects/shared/queue-2026-10-30/_common.md`
+- `~/.metasphere/projects/shared/queue-2026-10-31/_common.md`
+- `~/.metasphere/projects/shared/queue-2026-10-31-day/_common.md`
+- `~/.metasphere/projects/shared/queue-2026-11-03/_common.md`
+- `~/.metasphere/projects/shared/queue-2026-11-04/_common.md`
+- `~/.metasphere/projects/shared/queue-2026-11-06/4-venues-deeper.md`
+- `~/.metasphere/projects/shared/queue-2026-11-06/_common.md`
+- `~/.metasphere/projects/shared/queue-2026-11-07/_common.md`
+- `~/.metasphere/projects/truesday/approach-prompt.md`
+- `~/.metasphere/projects/writers-room/agents/@coach/AGENTS.md`
+- `~/.metasphere/projects/writers-room/coach-prompt.md`
+- `~/.metasphere/projects/writers-room/post-reminder-prompt.md`
+- `~/.metasphere/projects/writers-room/radar-prompt.md`
+- `~/.metasphere/projects/writers-room/researcher-prompt.md`
+- `~/.metasphere/projects/writers-room/seed-enricher-prompt.md`
+- `~/.metasphere/projects/writers-room/x-trial-prompt.md`
+- `~/.metasphere/scripts/remind-sarina-1116.sh`
+- `~/.metasphere/weekly-strategy-prompt.md`
 
 Not changed on purpose: `coach-prompt.md` line `metasphere telegram send --to orchestrator ...` (an agent-bus message, not a send to Alex), `schedule/jobs.json` (only `tg-html`, now surface-aware), history files (`MEMORY-INDEX-*`, `REVIEW-2026-10-24.md`, `.msg` outbox files). The brief said 58 files; a grep for every hardcoded form found 24 prompt/script files plus the `tg-html` path that the rest go through.
 
 ## Meter (7-day utilization)
 
-Before: 0.42 (23:31 UTC 17 Nov). After: METER_AFTER_PLACEHOLDER.
+Before: 0.42 (23:31 UTC 17 Nov). After: 0.44 (about 0.44, i.e. +0.01 for the whole build; 5h window was 0.08 at start).
 
 ## Open items
 
